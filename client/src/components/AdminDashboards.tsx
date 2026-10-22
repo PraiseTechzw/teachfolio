@@ -672,6 +672,7 @@ export function PlatformInstitutionDashboard({
     },
   });
   const rows = institutions.data ?? [];
+  const institutionalRows = rows.filter(row => !row.isDemo);
   const filtered = useMemo(
     () =>
       rows.filter(row =>
@@ -683,7 +684,7 @@ export function PlatformInstitutionDashboard({
   );
   const selected = rows.find(row => row.id === selectedId);
   const invitationsData = (invitations.data ?? []) as InvitationRow[];
-  const activeCount = rows.filter(row => row.active).length;
+  const activeCount = institutionalRows.filter(row => row.active).length;
   const pendingCount = invitationsData.filter(
     row => row.status === "pending_activation"
   ).length;
@@ -746,8 +747,8 @@ export function PlatformInstitutionDashboard({
         <div className="min-w-0 flex-1">
           <SectionHeading
             eyebrow="PLATFORM ADMINISTRATION"
-            title="Institution administration"
-            description="Create and maintain institution workspaces, establish their first administrator, and control tenant access. Changes are recorded in the platform audit log."
+            title="Institutions"
+            description="Create and manage institution workspaces, issue first-administrator invitations, and control institution access. Changes are recorded in the platform audit log."
           />
         </div>
         <button
@@ -765,9 +766,11 @@ export function PlatformInstitutionDashboard({
       </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric
-          label="Institutions"
+          label="Institution workspaces"
           value={
-            institutions.isLoading || institutions.error ? "—" : rows.length
+            institutions.isLoading || institutions.error
+              ? "—"
+              : institutionalRows.length
           }
           detail="Institution workspaces on the platform"
           icon={Building2}
@@ -786,7 +789,7 @@ export function PlatformInstitutionDashboard({
           value={
             institutions.isLoading || institutions.error
               ? "—"
-              : rows.length - activeCount
+              : institutionalRows.length - activeCount
           }
           detail="Access blocked until reactivated"
           tone="slate"
@@ -821,6 +824,11 @@ export function PlatformInstitutionDashboard({
               Platform-wide tenant records. Institution administrators cannot
               access this directory.
             </p>
+            {rows.some(row => row.isDemo) && (
+              <p className="mt-1 text-xs text-slate-500">
+                Reserved practice workspaces remain labeled and are excluded from institution totals.
+              </p>
+            )}
           </div>
           <label className="relative">
             <span className="sr-only">Search institutions</span>

@@ -87,7 +87,6 @@ const navBase = [
       "lecturer",
       "coordinator",
       "institution_admin",
-      "platform_admin",
     ],
   },
   {
@@ -194,7 +193,7 @@ const navBase = [
     roles: ["institution_admin", "platform_admin"],
   },
   {
-    label: "Institution administration",
+    label: "Institutions",
     path: "/admin/institutions",
     icon: Building2,
     roles: ["platform_admin"],
@@ -510,6 +509,10 @@ export default function App() {
     setSearch("");
   }, [path]);
   useEffect(() => {
+    if (access?.activated && access.roles.includes("platform_admin") && path === "/")
+      navigate("/admin/institutions");
+  }, [access?.activated, access?.roles, navigate, path]);
+  useEffect(() => {
     try {
       localStorage.setItem(
         "teachfolio-sidebar-expanded",
@@ -643,6 +646,9 @@ export default function App() {
           {allowedNav.map((item, index) => {
             const active =
               displayPath === item.path ||
+              (item.path === "/admin/institutions" &&
+                isPlatform &&
+                path === "/") ||
               (item.path === "/portfolio" && path.startsWith("/item/"));
             const Icon = item.icon;
             const section = navigationSection(item.label);
