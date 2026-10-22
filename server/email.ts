@@ -6,6 +6,7 @@ type EmailContent = {
   to: string;
   subject: string;
   heading: string;
+  preheader?: string;
   paragraphs: string[];
   action?: { label: string; href: string };
 };
@@ -13,6 +14,7 @@ type EmailContent = {
 export type NotificationEmail = {
   userId: number;
   subject: string;
+  heading: string;
   message: string;
   href: string;
 };
@@ -77,7 +79,12 @@ export async function sendTeachfolioEmail(content: EmailContent) {
   const action = content.action
     ? `<p style="margin:24px 0"><a href="${escapeHtml(content.action.href)}" style="display:inline-block;background:#285bc0;border-radius:8px;color:#fff;padding:12px 18px;text-decoration:none;font-weight:600">${escapeHtml(content.action.label)}</a></p><p style="color:#64748b;font-size:12px;line-height:1.6">If the button does not work, copy this address into your browser:<br><a href="${escapeHtml(content.action.href)}">${escapeHtml(content.action.href)}</a></p>`
     : "";
-  const html = `<div style="background:#f1f5f9;padding:32px 12px;font-family:Arial,sans-serif"><div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:32px"><p style="margin:0 0 24px;color:#285bc0;font-size:14px;font-weight:700;letter-spacing:.04em">Teachfolio</p><h1 style="margin:0 0 20px;color:#0f172a;font-size:24px;line-height:1.3">${escapeHtml(content.heading)}</h1>${paragraphs}${action}<hr style="border:0;border-top:1px solid #e2e8f0;margin:28px 0 16px"><p style="margin:0;color:#64748b;font-size:12px;line-height:1.6">Student Teacher E-Portfolio · This is an automated account message.</p></div></div>`;
+  const preheader = content.preheader ?? content.paragraphs[0] ?? content.heading;
+  const markUrl = appLink("/teachfolio-mark.svg");
+  const wordmark = markUrl
+    ? `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 28px"><tr><td style="vertical-align:middle;padding-right:12px"><img src="${escapeHtml(markUrl)}" width="42" height="42" alt="Teachfolio" style="display:block;width:42px;height:42px;border:0"></td><td style="vertical-align:middle"><strong style="display:block;color:#0f172a;font-size:16px;line-height:1.3">Teachfolio</strong><span style="display:block;margin-top:3px;color:#64748b;font-size:11px">Student Teacher E-Portfolio</span></td></tr></table>`
+    : `<p style="margin:0 0 28px;color:#285bc0;font-size:15px;font-weight:700">Teachfolio <span style="font-size:11px;font-weight:400;color:#64748b">· Student Teacher E-Portfolio</span></p>`;
+  const html = `<div style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all">${escapeHtml(preheader)}</div><div style="background:#f3f6fb;padding:36px 14px;font-family:Arial,Helvetica,sans-serif"><div style="max-width:560px;margin:0 auto"><div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:34px 32px">${wordmark}<h1 style="margin:0 0 18px;color:#0f172a;font-size:25px;line-height:1.3;font-weight:700">${escapeHtml(content.heading)}</h1>${paragraphs}${action}<hr style="border:0;border-top:1px solid #e2e8f0;margin:30px 0 16px"><p style="margin:0;color:#64748b;font-size:12px;line-height:1.65">You received this message because of an action in Teachfolio. If you need help, contact your institution administrator.</p></div><p style="margin:16px 0 0;text-align:center;color:#94a3b8;font-size:11px">Teachfolio · Teaching Practice Portfolio</p></div></div>`;
   const text = [
     content.heading,
     "",
@@ -206,7 +213,7 @@ export async function emailNotificationRecipients(input: {
           sendTeachfolioEmail({
             to: recipient.email,
             subject: notification.subject,
-            heading: "There is an update to your teaching portfolio",
+            heading: notification.heading,
             paragraphs: [
               notification.message,
               `Institution: ${institution.name}.`,

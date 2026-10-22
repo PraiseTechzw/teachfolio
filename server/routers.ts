@@ -1045,6 +1045,7 @@ const appRouter = router({
           notifications: reviewerRecipientIds.map(userId => ({
             userId,
             subject: `Submission ready for review: ${entry.title}`,
+            heading: "A portfolio submission is ready for review",
             message: `${entry.title} is ready for review.`,
             href: "/reviews",
           })),
@@ -1378,6 +1379,11 @@ const appRouter = router({
             {
               userId: entry.userId,
               subject: `Portfolio submission ${prepared.status.replaceAll("_", " ")}: ${entry.title}`,
+              heading: prepared.status === "revision_required"
+                ? "Your submission needs a revision"
+                : prepared.status === "approved"
+                  ? "Your portfolio submission was approved"
+                  : "Your portfolio submission was reviewed",
               message: notificationMessage,
               href: "/submissions",
             },
@@ -1666,6 +1672,10 @@ const appRouter = router({
                 notification.type === "placement_assignment"
                   ? "Teaching-practice reviewer assignment"
                   : "Teaching-practice placement update",
+              heading:
+                notification.type === "placement_assignment"
+                  ? "A reviewer has been assigned to your placement"
+                  : "Your teaching-practice placement has been updated",
               message: notification.message,
               href: notification.href,
             }));
