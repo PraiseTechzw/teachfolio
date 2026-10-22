@@ -15,7 +15,9 @@ Use a dedicated, non-production Supabase project and synthetic data only. This c
 
 - [ ] Confirm the Supabase URL and database connection belong to the staging project. Confirm backups/recovery and an approved test-data retention plan.
 - [ ] Review the checked-in PostgreSQL migration before applying it. Apply migrations only to the empty/dedicated staging database; do not use `db:push` against production.
-- [ ] Configure Auth email/password, confirmation, Site URL, and allowed callback URLs for the staging origin.
+- [ ] Configure Auth email/password, confirmation, Site URL, and allowed redirect URLs for the staging origin, including `<APP_BASE_URL>/?invite=*` so invitation tokens survive confirmation/recovery redirects.
+- [ ] Configure a Resend-verified sender domain, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `APP_BASE_URL`; configure Supabase Auth SMTP through Resend for confirmation and password-recovery mail.
+- [ ] Register a synthetic account and confirm the Supabase confirmation email returns to the staging app; verify resend-confirmation and password-reset messages arrive and their links work.
 - [ ] Create the `teachfolio-evidence` bucket as private with a 25 MiB limit and exactly these MIME types: PDF, DOCX, XLSX, PPTX, JPEG, PNG, MP4.
 - [ ] Start with the local checks:
 
@@ -70,6 +72,8 @@ Create accounts and assignments through the supported invitation/admin flow. Use
 | Platform operator | Platform administrator; no institution-specific student evidence assignment |
 
 - [ ] Invite a staging user with Institution A admin; confirm the invitation is institution-bound, expires as configured, and only the matching authenticated email can redeem it.
+- [ ] Confirm the invitation email has the correct institution, role, matching-email instruction, and seven-day expiry; verify the link opens Teachfolio with the invitation token filled in. Confirm a missing/failed Resend configuration returns a manual token without preventing in-app workflows.
+- [ ] Redeem the invitation with the matching account and verify the account-activation email identifies the correct role and institution.
 - [ ] Confirm another tenant admin cannot list Institution A's invitations, users, placements, evidence, reports, or audit events by changing IDs or URLs.
 - [ ] Confirm a platform administrator can perform platform operations but cannot fetch student evidence without an explicit institution assignment.
 - [ ] Confirm Reviewer A can access Student A's submitted version and its evidence; Reviewer A2 and Student B cannot access it.
@@ -86,6 +90,7 @@ For each forbidden request, record the route/procedure and expected denial (403/
 - [ ] Cancel an in-progress upload; verify the UI reports cancellation and the evidence list is checked before retrying. The current workflow does not resume interrupted uploads.
 - [ ] Submit Student A's portfolio entry and confirm a version snapshot is created and cannot be silently edited while under review.
 - [ ] Reviewer A opens the queue, reviews the correct version/evidence, records rubric/comments, and requests revisions. Confirm a notification appears for Student A and does not appear for Student B.
+- [ ] Confirm Resend accepts notification emails for the assigned reviewer on submission, the student after a review decision, and the assigned student/reviewers after a placement change. Confirm unrelated/inactive institution users receive no email.
 - [ ] Student A reads the notification, revises the entry, resubmits, and confirms version history preserves both versions and prior review feedback.
 - [ ] Reviewer A approves or rejects the new version. Confirm status, reviewer identity/time, review history, and student notification reflect the decision.
 - [ ] Mark a notification read; verify read state persists after reload and tenant/owner checks prevent another account changing it.

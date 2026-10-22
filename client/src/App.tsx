@@ -1034,7 +1034,8 @@ export default function App() {
                 Contact your institution administrator for access changes,
                 portfolio requirements, placement questions, or an invitation.
                 Invitations must be shared through an approved secure channel.
-                Email and SMS delivery are not available.
+                Email delivery is available when configured for Teachfolio.
+                SMS delivery is not available.
               </p>
             </div>
             <button

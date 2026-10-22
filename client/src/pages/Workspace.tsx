@@ -936,7 +936,7 @@ export default function Workspace({
         ) : !notices.data?.length ? (
           <Empty
             title="No notifications yet"
-            body="Submission and review activity for your assigned portfolio will appear here."
+            body="Submission, review, and placement updates for your assigned portfolio will appear here."
           />
         ) : (
           <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white">

@@ -72,6 +72,7 @@ export function AuthExperience({ error }: { error?: string }) {
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
+  const inviteToken = new URLSearchParams(window.location.search).get("invite") ?? undefined;
   const utils = trpc.useUtils();
   const login = trpc.auth.login.useMutation({ onSuccess: () => utils.auth.me.invalidate() });
   const signup = trpc.auth.register.useMutation({
@@ -82,6 +83,10 @@ export function AuthExperience({ error }: { error?: string }) {
         setPassword("");
       } else await utils.auth.me.invalidate();
     },
+  });
+  const resendConfirmation = trpc.auth.resendSignupConfirmation.useMutation({
+    onSuccess: () => setNotice("If this address has a pending account, a confirmation email will be sent. Check your inbox and spam folder."),
+    onError: () => setNotice("The confirmation request could not be sent. Please try again."),
   });
   const reset = trpc.auth.requestPasswordReset.useMutation({
     onSuccess: () => setNotice("If an account exists for that email, a secure password reset link is on its way."),
@@ -103,8 +108,8 @@ export function AuthExperience({ error }: { error?: string }) {
     setFormError("");
     setNotice("");
     const onError = (cause: { message: string }) => setFormError(cause.message);
-    if (isForgot) reset.mutate({ email });
-    else if (isCreate) signup.mutate({ email, name, password }, { onError });
+    if (isForgot) reset.mutate({ email, inviteToken });
+    else if (isCreate) signup.mutate({ email, name, password, inviteToken }, { onError });
     else login.mutate({ email, password }, { onError });
   };
 
@@ -171,6 +176,16 @@ export function AuthExperience({ error }: { error?: string }) {
             )}
 
             {notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-[13px] leading-5 text-emerald-900">{notice}</p>}
+            {!isCreate && !isForgot && email.trim() && (
+              <button
+                type="button"
+                disabled={resendConfirmation.isPending}
+                onClick={() => resendConfirmation.mutate({ email: email.trim(), inviteToken })}
+                className="text-sm font-semibold text-[#285bc0] underline underline-offset-4 disabled:opacity-60"
+              >
+                {resendConfirmation.isPending ? "Sending confirmation…" : "Resend confirmation email"}
+              </button>
+            )}
             {(formError || error) && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-[13px] leading-5 text-rose-800">{formError || error}</p>}
 
             <button disabled={pending} className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-[#285bc0] px-4 text-sm font-semibold text-white shadow-[0_8px_18px_rgba(40,91,192,.2)] transition hover:bg-[#214fa9] hover:shadow-[0_10px_22px_rgba(40,91,192,.24)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-200 disabled:cursor-wait disabled:opacity-60">

@@ -56,11 +56,18 @@ import {
   REFRESH_COOKIE,
   registerAccount,
   revokeSession,
+  resendSignupConfirmation as resendSupabaseSignupConfirmation,
   sendPasswordReset,
   signInAccount,
   supabaseIdentity,
 } from "./supabase-auth";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import {
+  emailNotificationRecipients,
+  sendAccessActivatedEmail,
+  sendInvitationEmail,
+  type NotificationEmail,
+} from "./email";
 
 const kindSchema = z.enum([
   "scheme",
@@ -72,6 +79,15 @@ const kindSchema = z.enum([
   "final_report",
 ]);
 const decisionSchema = z.enum(["revision_required", "approved", "rejected"]);
+const inviteTokenSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{20,256}$/)
+  .optional();
+function authRedirectUrl(origin: string, inviteToken?: string) {
+  const url = new URL("/", origin);
+  if (inviteToken) url.searchParams.set("invite", inviteToken);
+  return url.toString();
+}
 const placementInput = z
   .object({
     id: z.number().int().positive().optional(),
@@ -247,6 +263,7 @@ const appRouter = router({
           email: z.string().email().max(320),
           name: z.string().trim().min(1).max(120),
           password: z.string().min(12).max(128),
+          inviteToken: inviteTokenSchema,
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -338,17 +355,42 @@ const appRouter = router({
         }
       }),
     requestPasswordReset: publicProcedure
-      .input(z.object({ email: z.string().email().max(320) }))
+      .input(
+        z.object({
+          email: z.string().email().max(320),
+          inviteToken: inviteTokenSchema,
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         const origin = sameOriginUrl(ctx.req);
         try {
           if (origin)
             await sendPasswordReset(
               input.email,
-              new URL("/", origin).toString()
+              authRedirectUrl(origin, input.inviteToken)
             );
         } catch {
           /* Keep responses indistinguishable for unknown emails. */
+        }
+        return { success: true } as const;
+      }),
+    resendSignupConfirmation: publicProcedure
+      .input(
+        z.object({
+          email: z.string().email().max(320),
+          inviteToken: inviteTokenSchema,
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const origin = sameOriginUrl(ctx.req);
+        try {
+          if (origin)
+            await resendSupabaseSignupConfirmation(
+              input.email,
+              authRedirectUrl(origin, input.inviteToken)
+            );
+        } catch {
+          // Keep the response indistinguishable for unknown or confirmed emails.
         }
         return { success: true } as const;
       }),
@@ -422,6 +464,27 @@ const appRouter = router({
             message:
               "Invitation is invalid, expired, already used, or not issued to this account.",
           });
+        try {
+          const database = await db.getDb();
+          const institution = database
+            ? await database
+                .select({ name: institutions.name })
+                .from(institutions)
+                .where(eq(institutions.id, invitation.institutionId))
+                .limit(1)
+            : [];
+          if (institution[0])
+            await sendAccessActivatedEmail({
+              email,
+              role: invitation.role,
+              institutionName: institution[0].name,
+            });
+        } catch (error) {
+          console.warn(
+            "[Email] Account activation email could not be prepared.",
+            error instanceof Error ? error.name : "UnknownError"
+          );
+        }
         return { success: true };
       }),
     logout: publicProcedure.mutation(async ({ ctx }) => {
@@ -898,6 +961,7 @@ const appRouter = router({
           version,
           evidenceFileIds,
         });
+        let reviewerRecipientIds: number[] = [];
         await database.transaction(async tx => {
           const updateResult = await tx
             .update(portfolioEntries)
@@ -964,6 +1028,7 @@ const appRouter = router({
           const uniqueReviewerIds = [
             ...new Set(activeReviewers.map(reviewer => reviewer.userId)),
           ];
+          reviewerRecipientIds = uniqueReviewerIds;
           if (uniqueReviewerIds.length)
             await tx.insert(notifications).values(
               uniqueReviewerIds.map(reviewerId => ({
@@ -974,6 +1039,15 @@ const appRouter = router({
                 href: "/reviews",
               }))
             );
+        });
+        await emailNotificationRecipients({
+          institutionId: tenant,
+          notifications: reviewerRecipientIds.map(userId => ({
+            userId,
+            subject: `Submission ready for review: ${entry.title}`,
+            message: `${entry.title} is ready for review.`,
+            href: "/reviews",
+          })),
         });
         return { success: true, version, submittedAt: new Date() };
       }),
@@ -1223,6 +1297,11 @@ const appRouter = router({
         }
         const database = await db.getDb();
         if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+        const notificationMessage =
+          `${entry.title}: ${prepared.status.replaceAll("_", " ")}. ${prepared.comments}`.slice(
+            0,
+            500
+          );
         await database.transaction(async tx => {
           const updateEntry = await tx
             .update(portfolioEntries)
@@ -1281,11 +1360,7 @@ const appRouter = router({
             institutionId: tenant,
             userId: entry.userId,
             type: prepared.status,
-            message:
-              `${entry.title}: ${prepared.status.replaceAll("_", " ")}. ${prepared.comments}`.slice(
-                0,
-                500
-              ),
+            message: notificationMessage,
             href: "/submissions",
           });
           await tx.insert(auditLogs).values({
@@ -1296,6 +1371,17 @@ const appRouter = router({
             targetId: String(entry.id),
             detail: `Version ${prepared.submissionVersion}; rubric ${prepared.rubric.rubricVersion}; score ${prepared.rubric.totalScore}/${prepared.rubric.maximumScore}`,
           });
+        });
+        await emailNotificationRecipients({
+          institutionId: tenant,
+          notifications: [
+            {
+              userId: entry.userId,
+              subject: `Portfolio submission ${prepared.status.replaceAll("_", " ")}: ${entry.title}`,
+              message: notificationMessage,
+              href: "/submissions",
+            },
+          ],
         });
         return { success: true };
       }),
@@ -1455,7 +1541,8 @@ const appRouter = router({
         await verifyAssignment(input.supervisorUserId, "supervisor");
         await verifyAssignment(input.lecturerUserId, "lecturer");
 
-        return database.transaction(async tx => {
+        let placementEmails: NotificationEmail[] = [];
+        const result = await database.transaction(async tx => {
           // Serialize writes for a student so two coordinators cannot create
           // duplicate active placement rows at the same time.
           await tx.execute(
@@ -1573,6 +1660,15 @@ const appRouter = router({
                 ...notification,
               }))
             );
+            placementEmails = [...recipients].map(([userId, notification]) => ({
+              userId,
+              subject:
+                notification.type === "placement_assignment"
+                  ? "Teaching-practice reviewer assignment"
+                  : "Teaching-practice placement update",
+              message: notification.message,
+              href: notification.href,
+            }));
             await tx.insert(auditLogs).values({
               institutionId: tenant,
               actorUserId: ctx.user.id,
@@ -1584,6 +1680,11 @@ const appRouter = router({
           }
           return { id: placementId, success: true };
         });
+        await emailNotificationRecipients({
+          institutionId: tenant,
+          notifications: placementEmails,
+        });
+        return result;
       }),
     requirements: requireRoles("coordinator", "institution_admin").query(
       async ({ ctx }) => {
@@ -1862,19 +1963,26 @@ const appRouter = router({
           });
         const database = await db.getDb();
         if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+        const invitationInstitution = await database
+          .select({
+            id: institutions.id,
+            name: institutions.name,
+            isDemo: institutions.isDemo,
+          })
+          .from(institutions)
+          .where(and(eq(institutions.id, tenant), eq(institutions.active, true)))
+          .limit(1);
+        if (!invitationInstitution[0])
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Institution not found.",
+          });
+        if (invitationInstitution[0].isDemo)
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Invitations are not available for reserved practice workspaces.",
+          });
         if (isPlatformAdmin) {
-          const institution = await database
-            .select({ id: institutions.id })
-            .from(institutions)
-            .where(
-              and(eq(institutions.id, tenant), eq(institutions.active, true))
-            )
-            .limit(1);
-          if (!institution[0])
-            throw new TRPCError({
-              code: "NOT_FOUND",
-              message: "Institution not found.",
-            });
           if (input.role !== "institution_admin")
             throw new TRPCError({
               code: "FORBIDDEN",
@@ -1903,7 +2011,17 @@ const appRouter = router({
           targetId: String(inserted[0]!.id),
           detail: `Role ${input.role}; expires in 7 days.`,
         });
-        return { token, expiresInDays: 7, delivery: "manual" as const };
+        const emailAccepted = await sendInvitationEmail({
+          email: input.email.trim().toLowerCase(),
+          role: input.role,
+          institutionName: invitationInstitution[0].name,
+          token,
+        });
+        return {
+          token: emailAccepted ? null : token,
+          expiresInDays: 7,
+          delivery: emailAccepted ? ("email" as const) : ("manual" as const),
+        };
       }),
     users: requireRoles("institution_admin").query(async ({ ctx }) => {
       if (ctx.appAccess.institutionId === null)

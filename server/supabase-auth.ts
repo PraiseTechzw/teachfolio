@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { ENV } from "./_core/env";
+import { sameOriginUrl } from "./_core/request-origin";
 
 export const REFRESH_COOKIE = "teachfolio_refresh_token";
 
@@ -37,11 +38,18 @@ export function clearAuthCookies(res: Response, req: Request) {
   res.clearCookie(REFRESH_COOKIE, { ...options, maxAge: -1 });
 }
 
-export async function registerAccount(input: { email: string; name: string; password: string }, req: Request, res: Response) {
+export async function registerAccount(input: { email: string; name: string; password: string; inviteToken?: string }, req: Request, res: Response) {
+  const origin = sameOriginUrl(req);
+  const redirect = origin ? new URL("/", origin) : null;
+  if (redirect && input.inviteToken)
+    redirect.searchParams.set("invite", input.inviteToken);
   const { data, error } = await authClient().auth.signUp({
     email: input.email.trim().toLowerCase(),
     password: input.password,
-    options: { data: { full_name: input.name.trim() } },
+    options: {
+      data: { full_name: input.name.trim() },
+      ...(redirect ? { emailRedirectTo: redirect.toString() } : {}),
+    },
   });
   if (error) throw error;
   if (data.session) setAuthCookies(res, req, data.session);
@@ -57,6 +65,15 @@ export async function establishSupabaseSession(accessToken: string, refreshToken
 
 export async function sendPasswordReset(email: string, redirectTo: string) {
   const { error } = await authClient().auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo });
+  if (error) throw error;
+}
+
+export async function resendSignupConfirmation(email: string, redirectTo: string) {
+  const { error } = await authClient().auth.resend({
+    type: "signup",
+    email: email.trim().toLowerCase(),
+    options: { emailRedirectTo: redirectTo },
+  });
   if (error) throw error;
 }
 

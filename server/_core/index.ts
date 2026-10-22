@@ -69,6 +69,7 @@ async function startServer() {
         "/auth.register",
         "/auth.confirmSession",
         "/auth.requestPasswordReset",
+        "/auth.resendSignupConfirmation",
         "/auth.updatePassword",
       ].includes(req.path)
     ) {

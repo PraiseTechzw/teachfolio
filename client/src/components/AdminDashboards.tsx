@@ -251,10 +251,16 @@ export function UserActivationDashboard({
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("student_teacher");
   const [token, setToken] = useState("");
+  const [invitationStatus, setInvitationStatus] = useState("");
   const [formError, setFormError] = useState("");
   const invite = trpc.admin.invite.useMutation({
     onSuccess: async result => {
-      setToken(result.token);
+      setToken(result.token ?? "");
+      setInvitationStatus(
+        result.delivery === "email"
+          ? "Resend accepted the invitation email for sending. Ask the recipient to check their inbox."
+          : "Email delivery was unavailable. Copy the one-time token below and share it securely."
+      );
       setEmail("");
       setFormError("");
       await utils.admin.invitations.invalidate();
@@ -309,6 +315,7 @@ export function UserActivationDashboard({
   const submitInvite = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setToken("");
+    setInvitationStatus("");
     setFormError("");
     invite.mutate({ email: email.trim().toLowerCase(), role });
   };
@@ -521,9 +528,10 @@ export function UserActivationDashboard({
             <h2 className="font-semibold">Issue an invitation</h2>
           </div>
           <p className="mt-2 text-xs leading-relaxed text-slate-500">
-            Select the intended role. The account stays inactive until its
-            signed-in Supabase email matches and the one-time token is claimed.
-            Delivery is manual.
+            Select the intended role. The account stays inactive until the
+            matching email account claims the invitation. Resend sends the link
+            when configured; otherwise a one-time token is provided for secure
+            sharing.
           </p>
           <label className="mt-4 block text-xs font-semibold text-slate-600">
             Institution email
@@ -581,6 +589,14 @@ export function UserActivationDashboard({
               {formError}
             </p>
           )}
+          {invitationStatus && (
+            <p
+              role="status"
+              className="mt-3 rounded-lg bg-indigo-50 p-3 text-sm text-indigo-900"
+            >
+              {invitationStatus}
+            </p>
+          )}
           {token && (
             <div
               role="status"
@@ -601,8 +617,8 @@ export function UserActivationDashboard({
                   Copy token
                 </button>
                 <span className="text-xs text-amber-900">
-                  Share privately with the intended recipient. No email was
-                  sent.
+                  Share securely with the intended recipient. Email delivery was
+                  not confirmed.
                 </span>
               </div>
             </div>
@@ -640,6 +656,7 @@ export function PlatformInstitutionDashboard({
   const [code, setCode] = useState("");
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
+  const [invitationStatus, setInvitationStatus] = useState("");
   const [institutionError, setInstitutionError] = useState("");
   useEffect(() => {
     const firstInstitution = institutions.data?.find(row => !row.isDemo);
@@ -652,7 +669,12 @@ export function PlatformInstitutionDashboard({
   );
   const invite = trpc.admin.invite.useMutation({
     onSuccess: async result => {
-      setToken(result.token);
+      setToken(result.token ?? "");
+      setInvitationStatus(
+        result.delivery === "email"
+          ? "Resend accepted the invitation email for sending. Ask the recipient to check their inbox."
+          : "Email delivery was unavailable. Copy the one-time token below and share it securely."
+      );
       setEmail("");
       setInstitutionError("");
       await utils.admin.invitations.invalidate();
@@ -727,6 +749,7 @@ export function PlatformInstitutionDashboard({
       return;
     }
     setToken("");
+    setInvitationStatus("");
     setInstitutionError("");
     invite.mutate({
       institutionId: selected.id,
@@ -1030,8 +1053,8 @@ export function PlatformInstitutionDashboard({
           <p className="mt-2 text-xs leading-relaxed text-slate-500">
             Issue a single-use invitation token for the selected institution.
             The recipient must sign in with this email and redeem the token.
-            Send it through an approved secure channel; no email is sent
-            automatically.
+            Resend sends the invitation link when configured; otherwise the
+            token is provided for secure sharing.
           </p>
           <label className="mt-4 block text-xs font-semibold text-slate-600">
             Institution
@@ -1102,6 +1125,14 @@ export function PlatformInstitutionDashboard({
               {institutionError}
             </p>
           )}
+          {invitationStatus && (
+            <p
+              role="status"
+              className="mt-3 rounded-lg bg-indigo-50 p-3 text-sm text-indigo-900"
+            >
+              {invitationStatus}
+            </p>
+          )}
           {token && (
             <div
               role="status"
@@ -1121,7 +1152,8 @@ export function PlatformInstitutionDashboard({
                 Copy token
               </button>
               <p className="mt-2 text-xs text-amber-900">
-                Share privately with the intended recipient. No email was sent.
+                Share securely with the intended recipient. Email delivery was
+                not confirmed.
               </p>
             </div>
           )}
