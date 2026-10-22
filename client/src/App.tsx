@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { trpc } from "@/lib/trpc";
-import PortfolioFormDialog from "@/components/PortfolioFormDialog";
-import Workspace from "@/pages/Workspace";
+const PortfolioFormDialog = lazy(
+  () => import("@/components/PortfolioFormDialog")
+);
+const Workspace = lazy(() => import("@/pages/Workspace"));
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -954,14 +956,24 @@ export default function App() {
                 ease: "easeOut",
               }}
             >
-              <Workspace
-                path={path}
-                searchTerm={search}
-                user={access}
-                onCreate={openCreate}
-                onEdit={openEdit}
-                onNavigate={navigate}
-              />
+              <Suspense
+                fallback={
+                  <div
+                    className="min-h-64 animate-pulse rounded-2xl bg-white"
+                    role="status"
+                    aria-label="Loading workspace"
+                  />
+                }
+              >
+                <Workspace
+                  path={path}
+                  searchTerm={search}
+                  user={access}
+                  onCreate={openCreate}
+                  onEdit={openEdit}
+                  onNavigate={navigate}
+                />
+              </Suspense>
             </motion.div>
           </AnimatePresence>
         </main>
@@ -1023,13 +1035,23 @@ export default function App() {
           </section>
         </div>
       )}
-      <PortfolioFormDialog
-        open={formOpen}
-        kind={formKind}
-        entry={editing}
-        onClose={() => setFormOpen(false)}
-        onSaved={id => navigate(`/item/${id}`)}
-      />
+      {formOpen && (
+        <Suspense
+          fallback={
+            <div role="status" className="sr-only">
+              Loading portfolio editor…
+            </div>
+          }
+        >
+          <PortfolioFormDialog
+            open={formOpen}
+            kind={formKind}
+            entry={editing}
+            onClose={() => setFormOpen(false)}
+            onSaved={id => navigate(`/item/${id}`)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
