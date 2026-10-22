@@ -138,6 +138,7 @@ export default function StudentPortfolioModule({
     if (path === "/portfolio") return (overview.data?.entries ?? []) as Entry[];
     return (listQuery.data ?? []) as Entry[];
   }, [listQuery.data, overview.data?.entries, path]);
+  const requirements = overview.data?.requirements ?? [];
   const queryText = (localSearch || searchTerm).trim().toLowerCase();
   const categoryEntries = entries.filter(entry => {
     if (path === "/submissions" && ["draft", "archived"].includes(entry.status))

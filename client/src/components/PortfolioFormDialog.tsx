@@ -635,7 +635,7 @@ export default function PortfolioFormDialog({
         );
       setError(
         unavailable
-          ? `DEMO MODE — the portfolio backend or private storage is unavailable. Any earlier metadata save may have succeeded, but the file/submission was not confirmed. No local offline changes are persisted. ${message}`
+          ? `Operation not confirmed — the portfolio backend or private storage is unavailable. Any earlier metadata save may have succeeded, but the file/submission was not confirmed. Check the saved record before retrying. ${message}`
           : message
       );
       await utils.portfolio.overview.invalidate();
@@ -1604,7 +1604,7 @@ export default function PortfolioFormDialog({
           {error && (
             <div
               role="alert"
-              className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${error.startsWith("DEMO MODE") ? "border-amber-300 bg-amber-50 text-amber-950" : "border-rose-200 bg-rose-50 text-rose-800"}`}
+              className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${error.startsWith("Operation not confirmed") ? "border-amber-300 bg-amber-50 text-amber-950" : "border-rose-200 bg-rose-50 text-rose-800"}`}
             >
               <AlertTriangle className="mt-0.5 shrink-0" size={16} />
               {error}

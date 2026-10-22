@@ -2,6 +2,13 @@
 
 Use a dedicated, non-production Supabase project and synthetic data only. This checklist is designed to be completed by an operator with staging access; do not paste credentials, session cookies, invitation tokens, learner data, or private file URLs into tickets or source control.
 
+## Current verification record — 2026-10-22
+
+- Local `pnpm check`, `pnpm test`, `pnpm build`, and `git diff --check` passed on this working tree. Vitest reports 52 tests across 11 files. The production build still reports an 809.47 kB main JavaScript chunk above Vite's 500 kB warning threshold.
+- The outage path now shows an error without fictional portfolio records; a component regression test covers a service-unavailable response. This is local component verification, not a live workflow test.
+- Staging verification and account-based acceptance remain **not run**: no staging credentials/project access or functioning DNS was available in the execution environment. Do not mark the boxes below complete based on this record.
+- No production deployment was performed. The intended host/domain and production runtime configuration still need to be selected and verified.
+
 ## 1. Build and prepare staging
 
 - [ ] Confirm the Supabase URL and database connection belong to the staging project. Confirm backups/recovery and an approved test-data retention plan.
@@ -105,3 +112,17 @@ Do not mark staging acceptance complete unless every mandatory item above is PAS
 Staging project reference (non-secret): __________  Release commit: __________  Date: __________
 
 Tester(s): __________  Decision: PASS / FAIL / CONDITIONAL  Open blocker(s): __________
+
+## 6. Production deployment gate
+
+Do not deploy to production until staging sign-off above is PASS and the release blockers in `requirements-audit.md` are resolved or explicitly accepted by the release owner.
+
+- [ ] Record the intended hosting provider, production domain, release commit, and named release owner.
+- [ ] Configure production-only secrets in the host's secret manager. Confirm the running server receives the required database, Supabase, session, and origin settings without printing values to logs.
+- [ ] Review migration compatibility and apply only an approved, backed-up production migration. Never use the demo seed against production.
+- [ ] Verify production HTTPS, Auth Site URL/callback allowlist, and allowed origins.
+- [ ] Confirm database and media backup/restore procedures, monitoring/error reporting, and a tested rollback path.
+- [ ] Deploy the approved release, run non-destructive health and sign-in checks, then verify an authorized portfolio read and private evidence denial for an unauthorized account.
+- [ ] Record the deployment URL, release commit, smoke-test results, and rollback owner. If any service check fails, roll back using the approved procedure and do not report the release as successful.
+
+Provider: __________  Domain: __________  Release commit: __________  Owner: __________  Deployment URL: __________
