@@ -52,6 +52,8 @@ For fictional sample data, run `pnpm seed:demo --confirm-fictional-demo-seed`. T
 
 Follow the [staging acceptance checklist](docs/staging-acceptance.md) before accepting a staging release. The verifier does not run migrations or modify database/storage data.
 
+For the Docker runtime, Render staging Blueprint, required environment variables, region/hosting recommendation, DNS diagnosis, migration precautions, Auth setup, and end-to-end staging sequence, follow the [staging deployment guide](docs/staging-deployment.md). `/api/health` is a process liveness endpoint; `/api/ready` checks database readiness and returns only a generic status. Neither endpoint proves Auth, Storage, or user workflow availability.
+
 The checked-in application schema is now PostgreSQL. Old MySQL migration files under `drizzle/` are historical and must not be applied to Supabase. Review generated SQL before applying it to a live project. The app does not automatically copy data from a former MySQL database; migrate any existing records separately before switching production traffic.
 
 The prototype implements institution-scoped roles, invitation activation, portfolio submissions, reviewer workflows, private evidence authorization, notifications and CSV reporting. It does not claim legal compliance or institutional accreditation. Do not upload identifiable learner media without required school and guardian consent. Configure backups, monitoring, retention, consent procedures and incident response before real student use.

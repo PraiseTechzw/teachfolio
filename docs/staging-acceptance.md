@@ -4,10 +4,12 @@ Use a dedicated, non-production Supabase project and synthetic data only. This c
 
 ## Current verification record — 2026-10-22
 
-- Local `pnpm check`, `pnpm test`, `pnpm build`, and `git diff --check` passed on this working tree. Vitest reports 52 tests across 11 files. The production build still reports an 809.47 kB main JavaScript chunk above Vite's 500 kB warning threshold.
+- Local `pnpm check`, `pnpm test`, `pnpm build`, and `git diff HEAD --check` pass on the current deployment changes; Vitest reports 56 tests across 13 files. The production build reports an 809.47 kB main JavaScript chunk above Vite's 500 kB warning threshold.
+- A local Docker image build was attempted but could not access `/var/run/docker.sock` in this environment. The deployment configuration has unit coverage; the container image still needs to be built and started by the connected staging host/CI before accepting it.
 - The outage path now shows an error without fictional portfolio records; a component regression test covers a service-unavailable response. This is local component verification, not a live workflow test.
 - Staging verification and account-based acceptance remain **not run**: no staging credentials/project access or functioning DNS was available in the execution environment. Do not mark the boxes below complete based on this record.
 - No production deployment was performed. The intended host/domain and production runtime configuration still need to be selected and verified.
+- The staging deployment path is now documented in [docs/staging-deployment.md](staging-deployment.md), with a Render Docker Blueprint that requires operator-supplied staging service credentials and has no deploy-time migration or seed hook.
 
 ## 1. Build and prepare staging
 

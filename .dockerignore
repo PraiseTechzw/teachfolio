@@ -1,6 +1,9 @@
 node_modules
 dist
 .git
+.agents
+.codex
+.aws
 .env
 .env.*
 .manus-logs

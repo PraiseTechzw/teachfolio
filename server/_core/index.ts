@@ -9,6 +9,9 @@ import { registerEvidenceRoutes } from "../evidence";
 import { issueCsrfToken, verifyCsrfToken } from "./csrf";
 import { sdk } from "./sdk";
 import { sameOriginUrl } from "./request-origin";
+import { sql } from "drizzle-orm";
+import { getDb } from "../db";
+import { createReadinessHandler } from "./readiness";
 
 async function startServer() {
   if (
@@ -36,6 +39,14 @@ async function startServer() {
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ limit: "100kb", extended: true }));
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
+  app.get(
+    "/api/ready",
+    createReadinessHandler(async () => {
+      const database = await getDb();
+      if (!database) throw new Error("Database is not configured.");
+      await database.execute(sql`select 1`);
+    })
+  );
   app.get("/api/csrf", async (req, res) => {
     try {
       const user = await sdk.authenticateRequest(req, res);
