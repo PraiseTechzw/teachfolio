@@ -1131,3 +1131,613 @@ export function PlatformInstitutionDashboard({
     </div>
   );
 }
+
+type PlacementFormState = {
+  studentUserId: string;
+  schoolName: string;
+  schoolLocation: string;
+  programme: string;
+  cohort: string;
+  studentNumber: string;
+  subject: string;
+  classes: string;
+  startDate: string;
+  endDate: string;
+  supervisorUserId: string;
+  lecturerUserId: string;
+  status: "active" | "completed" | "upcoming";
+};
+
+const emptyPlacementForm: PlacementFormState = {
+  studentUserId: "",
+  schoolName: "",
+  schoolLocation: "",
+  programme: "",
+  cohort: "",
+  studentNumber: "",
+  subject: "",
+  classes: "",
+  startDate: "",
+  endDate: "",
+  supervisorUserId: "",
+  lecturerUserId: "",
+  status: "active",
+};
+
+export function PlacementManagementDashboard({
+  allowed,
+}: {
+  allowed: boolean;
+}) {
+  const placements = trpc.admin.placements.useQuery(undefined, {
+    enabled: allowed,
+    retry: false,
+  });
+  const options = trpc.admin.placementOptions.useQuery(undefined, {
+    enabled: allowed,
+    retry: false,
+  });
+  const utils = trpc.useUtils();
+  const [form, setForm] = useState<PlacementFormState>(emptyPlacementForm);
+  const [editingId, setEditingId] = useState<number>();
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [message, setMessage] = useState("");
+  const save = trpc.admin.savePlacement.useMutation({
+    onSuccess: async result => {
+      await Promise.all([
+        utils.admin.placements.invalidate(),
+        utils.notifications.mine.invalidate(),
+      ]);
+      setEditingId(undefined);
+      setForm(emptyPlacementForm);
+      setMessage(
+        editingId ? "Placement updated." : "Placement created and assigned."
+      );
+      if (!editingId) setSearch("");
+    },
+  });
+  const rows = placements.data ?? [];
+  const students = options.data?.students ?? [];
+  const supervisors = options.data?.supervisors ?? [];
+  const lecturers = options.data?.lecturers ?? [];
+  const activeCount = rows.filter(row => row.status === "active").length;
+  const unassignedCount = rows.filter(
+    row => !row.supervisorUserId || !row.lecturerUserId
+  ).length;
+  const filtered = useMemo(
+    () =>
+      rows.filter(row => {
+        const searchText =
+          `${row.studentName} ${row.studentEmail} ${row.schoolName} ${row.schoolLocation} ${row.subject} ${row.cohort}`.toLowerCase();
+        return (
+          searchText.includes(search.trim().toLowerCase()) &&
+          (filter === "all" || row.status === filter)
+        );
+      }),
+    [filter, rows, search]
+  );
+  const setField = <K extends keyof PlacementFormState>(
+    key: K,
+    value: PlacementFormState[K]
+  ) => setForm(previous => ({ ...previous, [key]: value }));
+
+  if (!allowed)
+    return (
+      <>
+        <SectionHeading
+          eyebrow="INSTITUTION ADMINISTRATION"
+          title="Placement management"
+          description="Placement and reviewer assignment is restricted to institution coordinators and administrators."
+        />
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+          The server enforces this restriction for direct route and API
+          requests.
+        </div>
+      </>
+    );
+
+  const beginEdit = (row: (typeof rows)[number]) => {
+    setEditingId(row.id);
+    setMessage("");
+    setForm({
+      studentUserId: String(row.studentUserId),
+      schoolName: row.schoolName,
+      schoolLocation: row.schoolLocation,
+      programme: row.programme,
+      cohort: row.cohort,
+      studentNumber: row.studentNumber,
+      subject: row.subject,
+      classes: row.classes.join(", "),
+      startDate: row.startDate,
+      endDate: row.endDate,
+      supervisorUserId: row.supervisorUserId
+        ? String(row.supervisorUserId)
+        : "",
+      lecturerUserId: row.lecturerUserId ? String(row.lecturerUserId) : "",
+      status: row.status,
+    });
+    document
+      .getElementById("placement-editor")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMessage("");
+    save.mutate({
+      ...(editingId ? { id: editingId } : {}),
+      studentUserId: Number(form.studentUserId),
+      schoolName: form.schoolName,
+      schoolLocation: form.schoolLocation,
+      programme: form.programme,
+      cohort: form.cohort,
+      studentNumber: form.studentNumber,
+      subject: form.subject,
+      classes: form.classes
+        .split(/[\n,]/)
+        .map(value => value.trim())
+        .filter(Boolean),
+      startDate: form.startDate,
+      endDate: form.endDate,
+      supervisorUserId: form.supervisorUserId
+        ? Number(form.supervisorUserId)
+        : null,
+      lecturerUserId: form.lecturerUserId ? Number(form.lecturerUserId) : null,
+      status: form.status,
+    });
+  };
+
+  const inputClass =
+    "mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800";
+  const labelClass = "block text-xs font-semibold text-slate-600";
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <SectionHeading
+            eyebrow="INSTITUTION ADMINISTRATION"
+            title="Placement management"
+            description="Connect each student teacher with a school, teaching programme and assigned supervisor or lecturer. Only active users in this institution can be selected."
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setEditingId(undefined);
+            setForm(emptyPlacementForm);
+            document
+              .getElementById("placement-editor")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+        >
+          <Plus size={16} /> New placement
+        </button>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Metric
+          label="Placements"
+          value={placements.isLoading || placements.error ? "—" : rows.length}
+          detail="In this institution"
+          icon={MapPin}
+        />
+        <Metric
+          label="Active placements"
+          value={placements.isLoading || placements.error ? "—" : activeCount}
+          detail="Currently in teaching practice"
+          tone="emerald"
+          icon={CalendarDays}
+        />
+        <Metric
+          label="Assignments to complete"
+          value={
+            placements.isLoading || placements.error ? "—" : unassignedCount
+          }
+          detail="Missing a supervisor or lecturer"
+          tone="amber"
+          icon={Users}
+        />
+      </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-semibold text-slate-900">
+                Placement directory
+              </h2>
+              <StateBadge tone="blue">{filtered.length} shown</StateBadge>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Student, school and reviewer records for this institution only.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="relative">
+              <span className="sr-only">Search placements</span>
+              <Search
+                size={15}
+                className="absolute left-3 top-2.5 text-slate-400"
+              />
+              <input
+                value={search}
+                onChange={event => setSearch(event.target.value)}
+                placeholder="Search placements…"
+                className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm sm:w-60"
+              />
+            </label>
+            <select
+              aria-label="Filter placements by status"
+              value={filter}
+              onChange={event => setFilter(event.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="upcoming">Upcoming</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+        </div>
+        {placements.isLoading ? (
+          <div role="status" className="p-6 text-sm text-slate-500">
+            Loading institution placements…
+          </div>
+        ) : placements.error ? (
+          <div
+            role="alert"
+            className="rounded-xl bg-rose-50 p-4 text-sm text-rose-800"
+          >
+            Placements could not be loaded. Confirm your institution role and
+            try again.
+          </div>
+        ) : !filtered.length ? (
+          <div className="rounded-xl border border-dashed border-slate-300 p-7 text-center">
+            <MapPin className="mx-auto text-slate-400" size={22} />
+            <p className="mt-2 text-sm font-semibold text-slate-700">
+              {rows.length
+                ? "No matching placements"
+                : "No placements set up yet"}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Create the student's placement and reviewer assignments to open
+              the review workflow.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filtered.map(row => (
+              <article
+                key={row.id}
+                className="grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] sm:items-center"
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600">
+                    <Users size={18} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {row.studentName}
+                    </p>
+                    <p className="truncate text-xs text-slate-500">
+                      {row.studentEmail || `Student #${row.studentUserId}`} ·{" "}
+                      {row.studentNumber}
+                    </p>
+                    <p className="mt-1 truncate text-xs font-medium text-slate-700">
+                      {row.programme} · {row.cohort} · {row.subject}
+                    </p>
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-800">
+                    {row.schoolName}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    {row.schoolLocation} · Class {row.classes.join(", ")}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {row.startDate} – {row.endDate}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <StateBadge
+                    tone={
+                      row.status === "active"
+                        ? "emerald"
+                        : row.status === "upcoming"
+                          ? "blue"
+                          : "slate"
+                    }
+                  >
+                    {row.status}
+                  </StateBadge>
+                  <ActionButton onClick={() => beginEdit(row)}>
+                    <Pencil size={14} /> Edit
+                  </ActionButton>
+                </div>
+                <div className="sm:col-span-3 grid gap-2 border-t border-slate-100 pt-3 text-xs sm:grid-cols-2">
+                  <p
+                    className={
+                      row.supervisorName
+                        ? "text-slate-600"
+                        : "font-medium text-amber-700"
+                    }
+                  >
+                    Supervisor: {row.supervisorName ?? "Not assigned"}
+                  </p>
+                  <p
+                    className={
+                      row.lecturerName
+                        ? "text-slate-600"
+                        : "font-medium text-amber-700"
+                    }
+                  >
+                    Lecturer: {row.lecturerName ?? "Not assigned"}
+                  </p>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <form
+        id="placement-editor"
+        onSubmit={submit}
+        className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-6"
+      >
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+              Placement record
+            </p>
+            <h2 className="mt-1 font-semibold text-slate-900">
+              {editingId ? "Edit placement" : "Create placement"}
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              New assignments notify the student and assigned reviewers.
+            </p>
+          </div>
+          {editingId && (
+            <ActionButton
+              onClick={() => {
+                setEditingId(undefined);
+                setForm(emptyPlacementForm);
+                setMessage("");
+              }}
+            >
+              <X size={14} /> Cancel edit
+            </ActionButton>
+          )}
+        </div>
+        {options.error ? (
+          <div
+            role="alert"
+            className="mb-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-800"
+          >
+            Institution assignment options could not be loaded.
+          </div>
+        ) : !students.length && !options.isLoading ? (
+          <div className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+            Invite and activate student teachers before creating placements.
+            Active supervisor and lecturer assignments are also required for
+            reviewer selection.
+          </div>
+        ) : !supervisors.length && !lecturers.length && !options.isLoading ? (
+          <div className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+            No active supervisors or lecturers are assigned to this institution
+            yet. Invite and activate at least one reviewer before assigning
+            placements.
+          </div>
+        ) : null}
+        <fieldset
+          disabled={
+            save.isPending ||
+            options.isLoading ||
+            !students.length ||
+            (!supervisors.length && !lecturers.length)
+          }
+          className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+        >
+          <label className={labelClass}>
+            Student teacher
+            <select
+              required
+              value={form.studentUserId}
+              onChange={event => setField("studentUserId", event.target.value)}
+              className={inputClass}
+            >
+              <option value="">Select a student</option>
+              {students.map(person => (
+                <option key={person.userId} value={person.userId}>
+                  {person.name || person.email || `Student #${person.userId}`}
+                  {person.email && person.name ? ` · ${person.email}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={labelClass}>
+            School name
+            <input
+              required
+              minLength={2}
+              maxLength={220}
+              value={form.schoolName}
+              onChange={event => setField("schoolName", event.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className={labelClass}>
+            School location
+            <input
+              required
+              minLength={2}
+              maxLength={220}
+              value={form.schoolLocation}
+              onChange={event => setField("schoolLocation", event.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className={labelClass}>
+            Programme
+            <input
+              required
+              minLength={2}
+              maxLength={180}
+              value={form.programme}
+              onChange={event => setField("programme", event.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className={labelClass}>
+            Cohort
+            <input
+              required
+              maxLength={100}
+              value={form.cohort}
+              onChange={event => setField("cohort", event.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className={labelClass}>
+            Student number
+            <input
+              required
+              maxLength={80}
+              value={form.studentNumber}
+              onChange={event => setField("studentNumber", event.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className={labelClass}>
+            Teaching subject
+            <input
+              required
+              minLength={2}
+              maxLength={140}
+              value={form.subject}
+              onChange={event => setField("subject", event.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className={labelClass}>
+            Classes
+            <input
+              required
+              value={form.classes}
+              onChange={event => setField("classes", event.target.value)}
+              placeholder="e.g. Form 2A, Form 2B"
+              className={inputClass}
+            />
+            <span className="mt-1 block font-normal text-slate-500">
+              Separate class names with commas.
+            </span>
+          </label>
+          <label className={labelClass}>
+            Placement status
+            <select
+              value={form.status}
+              onChange={event =>
+                setField(
+                  "status",
+                  event.target.value as PlacementFormState["status"]
+                )
+              }
+              className={inputClass}
+            >
+              <option value="upcoming">Upcoming</option>
+              <option value="active">Active</option>
+              <option value="completed">Completed</option>
+            </select>
+          </label>
+          <label className={labelClass}>
+            Start date
+            <input
+              required
+              type="date"
+              value={form.startDate}
+              onChange={event => setField("startDate", event.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className={labelClass}>
+            End date
+            <input
+              required
+              type="date"
+              value={form.endDate}
+              onChange={event => setField("endDate", event.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className={labelClass}>
+            Supervisor
+            <select
+              value={form.supervisorUserId}
+              onChange={event =>
+                setField("supervisorUserId", event.target.value)
+              }
+              className={inputClass}
+            >
+              <option value="">Not assigned</option>
+              {supervisors.map(person => (
+                <option key={person.userId} value={person.userId}>
+                  {person.name ||
+                    person.email ||
+                    `Supervisor #${person.userId}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={labelClass}>
+            Lecturer
+            <select
+              value={form.lecturerUserId}
+              onChange={event => setField("lecturerUserId", event.target.value)}
+              className={inputClass}
+            >
+              <option value="">Not assigned</option>
+              {lecturers.map(person => (
+                <option key={person.userId} value={person.userId}>
+                  {person.name || person.email || `Lecturer #${person.userId}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        </fieldset>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <button
+            type="submit"
+            disabled={
+              save.isPending ||
+              options.isLoading ||
+              !students.length ||
+              (!supervisors.length && !lecturers.length)
+            }
+            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Save size={15} />
+            {save.isPending
+              ? "Saving…"
+              : editingId
+                ? "Save placement"
+                : "Create placement"}
+          </button>
+          {message && (
+            <p role="status" className="text-sm text-emerald-700">
+              {message}
+            </p>
+          )}
+          {save.error && (
+            <p role="alert" className="text-sm text-rose-700">
+              {save.error.message}
+            </p>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}

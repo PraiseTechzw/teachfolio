@@ -155,6 +155,12 @@ const navBase = [
     roles: ["coordinator", "institution_admin"],
   },
   {
+    label: "Placements",
+    path: "/admin/placements",
+    icon: MapPin,
+    roles: ["coordinator", "institution_admin"],
+  },
+  {
     label: "Portfolio requirements",
     path: "/admin/requirements",
     icon: Settings,

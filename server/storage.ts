@@ -6,7 +6,9 @@ function storageConfig() {
   const secret = ENV.supabaseSecretKey;
   const bucket = ENV.supabaseStorageBucket;
   if (!baseUrl || !secret || !bucket) {
-    throw new Error("Set SUPABASE_URL, SUPABASE_SECRET_KEY and SUPABASE_STORAGE_BUCKET.");
+    throw new Error(
+      "Set SUPABASE_URL, SUPABASE_SECRET_KEY and SUPABASE_STORAGE_BUCKET."
+    );
   }
   return { baseUrl, secret, bucket };
 }
@@ -26,26 +28,55 @@ function authHeaders(secret: string) {
   return { apikey: secret };
 }
 
+async function assertPrivateBucket(config: ReturnType<typeof storageConfig>) {
+  const response = await fetch(
+    `${config.baseUrl}/storage/v1/bucket/${encodeURIComponent(config.bucket)}`,
+    { headers: authHeaders(config.secret) }
+  );
+  if (!response.ok) {
+    throw new Error(
+      "Supabase Storage bucket configuration could not be verified."
+    );
+  }
+  const bucket = (await response.json()) as { public?: unknown };
+  if (bucket.public !== false) {
+    throw new Error("The evidence Storage bucket must be private.");
+  }
+}
+
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string | Readable,
   contentType = "application/octet-stream",
-  contentLength?: number,
+  contentLength?: number
 ): Promise<{ key: string; url: string }> {
   const config = storageConfig();
+  await assertPrivateBucket(config);
   const key = encodedObjectPath(relKey);
   const streaming = data instanceof Readable;
-  const headers: Record<string, string> = { ...authHeaders(config.secret), "Content-Type": contentType, "x-upsert": "false" };
-  if (streaming && contentLength !== undefined) headers["Content-Length"] = String(contentLength);
+  const headers: Record<string, string> = {
+    ...authHeaders(config.secret),
+    "Content-Type": contentType,
+    "x-upsert": "false",
+  };
+  if (streaming && contentLength !== undefined)
+    headers["Content-Length"] = String(contentLength);
   const response = await fetch(apiUrl(config.baseUrl, "", key), {
     method: "POST",
     headers,
-    body: typeof data === "string" ? data : streaming ? data as unknown as BodyInit : new Uint8Array(data),
+    body:
+      typeof data === "string"
+        ? data
+        : streaming
+          ? (data as unknown as BodyInit)
+          : new Uint8Array(data),
     ...(streaming ? { duplex: "half" } : {}),
   } as RequestInit & { duplex?: "half" });
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    throw new Error(`Supabase Storage upload failed (${response.status}): ${detail.slice(0, 300)}`);
+    throw new Error(
+      `Supabase Storage upload failed (${response.status}): ${detail.slice(0, 300)}`
+    );
   }
   return { key, url: key };
 }
@@ -62,24 +93,33 @@ export async function storageDelete(relKey: string): Promise<void> {
   }
 }
 
-export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
+export async function storageGet(
+  relKey: string
+): Promise<{ key: string; url: string }> {
   const key = encodedObjectPath(relKey);
   return { key, url: key };
 }
 
 export async function storageGetSignedUrl(relKey: string): Promise<string> {
   const config = storageConfig();
+  await assertPrivateBucket(config);
   const key = encodedObjectPath(relKey);
   const response = await fetch(apiUrl(config.baseUrl, "sign", key), {
     method: "POST",
-    headers: { ...authHeaders(config.secret), "Content-Type": "application/json" },
+    headers: {
+      ...authHeaders(config.secret),
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({ expiresIn: 60 }),
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    throw new Error(`Supabase Storage signing failed (${response.status}): ${detail.slice(0, 300)}`);
+    throw new Error(
+      `Supabase Storage signing failed (${response.status}): ${detail.slice(0, 300)}`
+    );
   }
-  const result = await response.json() as { signedURL?: string };
-  if (!result.signedURL) throw new Error("Supabase Storage returned no signed URL.");
+  const result = (await response.json()) as { signedURL?: string };
+  if (!result.signedURL)
+    throw new Error("Supabase Storage returned no signed URL.");
   return new URL(result.signedURL, config.baseUrl).toString();
 }

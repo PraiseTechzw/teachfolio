@@ -21,6 +21,11 @@ import * as db from "./db";
 import { applicationProcedure, requireRoles } from "./authz";
 import { csvCell } from "./csv";
 import {
+  hasActivePlacementRole,
+  hasPlacementConflict,
+  validPlacementDateRange,
+} from "./placement-policy";
+import {
   canAccessPortfolioRecord,
   canChangeAssignmentStatus,
   canDecideSubmission,
@@ -30,9 +35,7 @@ import {
   validPortfolioLink,
   validatePortfolioSubmission,
 } from "./portfolio-validation";
-import {
-  evidenceIdsFromSnapshot,
-} from "./evidence-policy";
+import { evidenceIdsFromSnapshot } from "./evidence-policy";
 import { REVIEW_RUBRIC } from "../shared/review-rubric";
 import {
   affectedRowCount,
@@ -45,7 +48,18 @@ import {
 import { parse as parseCookieHeader } from "cookie";
 import { COOKIE_NAME } from "@shared/const";
 import { systemRouter } from "./_core/systemRouter";
-import { changePassword, clearAuthCookies, establishSupabaseSession, REFRESH_COOKIE, registerAccount, revokeSession, sendPasswordReset, signInAccount, supabaseIdentity } from "./supabase-auth";
+import { sameOriginUrl } from "./_core/request-origin";
+import {
+  changePassword,
+  clearAuthCookies,
+  establishSupabaseSession,
+  REFRESH_COOKIE,
+  registerAccount,
+  revokeSession,
+  sendPasswordReset,
+  signInAccount,
+  supabaseIdentity,
+} from "./supabase-auth";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
 const kindSchema = z.enum([
@@ -58,35 +72,47 @@ const kindSchema = z.enum([
   "final_report",
 ]);
 const decisionSchema = z.enum(["revision_required", "approved", "rejected"]);
-const placementInput = z.object({
-  id: z.number().int().positive().optional(),
-  studentUserId: z.number().int().positive(),
-  schoolName: z.string().trim().min(2).max(220),
-  schoolLocation: z.string().trim().min(2).max(220),
-  programme: z.string().trim().min(2).max(180),
-  cohort: z.string().trim().min(1).max(100),
-  studentNumber: z.string().trim().min(1).max(80),
-  subject: z.string().trim().min(2).max(140),
-  classes: z.array(z.string().trim().min(1).max(100)).min(1).max(30),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  supervisorUserId: z.number().int().positive().nullable(),
-  lecturerUserId: z.number().int().positive().nullable(),
-  status: z.enum(["active", "completed", "upcoming"]),
-}).superRefine((input, context) => {
-  const isDate = (value: string) => {
-    const parsed = new Date(`${value}T00:00:00.000Z`);
-    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-  };
-  if (!isDate(input.startDate) || !isDate(input.endDate)) {
-    context.addIssue({ code: "custom", message: "Placement dates must be valid calendar dates." });
-  } else if (input.startDate > input.endDate) {
-    context.addIssue({ code: "custom", message: "The placement end date must be on or after its start date." });
-  }
-  if (new Set(input.classes.map(value => value.toLowerCase())).size !== input.classes.length) {
-    context.addIssue({ code: "custom", message: "Class names must be unique." });
-  }
-});
+const placementInput = z
+  .object({
+    id: z.number().int().positive().optional(),
+    studentUserId: z.number().int().positive(),
+    schoolName: z.string().trim().min(2).max(220),
+    schoolLocation: z.string().trim().min(2).max(220),
+    programme: z.string().trim().min(2).max(180),
+    cohort: z.string().trim().min(1).max(100),
+    studentNumber: z.string().trim().min(1).max(80),
+    subject: z.string().trim().min(2).max(140),
+    classes: z.array(z.string().trim().min(1).max(100)).min(1).max(30),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    supervisorUserId: z.number().int().positive().nullable(),
+    lecturerUserId: z.number().int().positive().nullable(),
+    status: z.enum(["active", "completed", "upcoming"]),
+  })
+  .superRefine((input, context) => {
+    if (!validPlacementDateRange(input.startDate, input.endDate))
+      context.addIssue({
+        code: "custom",
+        message:
+          "Placement dates must be valid calendar dates with the end date on or after the start date.",
+      });
+    if (
+      new Set(input.classes.map(value => value.toLowerCase())).size !==
+      input.classes.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Class names must be unique.",
+      });
+    }
+    if (input.supervisorUserId === null && input.lecturerUserId === null) {
+      context.addIssue({
+        code: "custom",
+        message: "Assign at least one active supervisor or lecturer.",
+        path: ["supervisorUserId"],
+      });
+    }
+  });
 const entrySelect = {
   id: portfolioEntries.id,
   institutionId: portfolioEntries.institutionId,
@@ -215,47 +241,148 @@ async function canReadEntry(
 const appRouter = router({
   system: systemRouter,
   auth: router({
-    register: publicProcedure.input(z.object({ email: z.string().email().max(320), name: z.string().trim().min(1).max(120), password: z.string().min(12).max(128) })).mutation(async ({ ctx, input }) => {
-      try {
-        const result = await registerAccount(input, ctx.req, ctx.res);
-        if (result.user && !result.requiresEmailConfirmation) {
-          const identity = supabaseIdentity(result.user);
-          await db.upsertUser({ ...identity, loginMethod: "supabase", lastSignedIn: new Date() });
+    register: publicProcedure
+      .input(
+        z.object({
+          email: z.string().email().max(320),
+          name: z.string().trim().min(1).max(120),
+          password: z.string().min(12).max(128),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const result = await registerAccount(input, ctx.req, ctx.res);
+          if (result.user && !result.requiresEmailConfirmation) {
+            const identity = supabaseIdentity(result.user);
+            await db.upsertUser({
+              ...identity,
+              loginMethod: "supabase",
+              lastSignedIn: new Date(),
+            });
+          }
+          return {
+            success: true,
+            requiresEmailConfirmation: result.requiresEmailConfirmation,
+          } as const;
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Account registration failed.";
+          if (message.toLowerCase().includes("already registered"))
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "An account with this email already exists.",
+            });
+          throw new TRPCError({ code: "BAD_REQUEST", message });
         }
-        return { success: true, requiresEmailConfirmation: result.requiresEmailConfirmation } as const;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Account registration failed.";
-        if (message.toLowerCase().includes("already registered")) throw new TRPCError({ code: "CONFLICT", message: "An account with this email already exists." });
-        throw new TRPCError({ code: "BAD_REQUEST", message });
-      }
-    }),
-    login: publicProcedure.input(z.object({ email: z.string().email().max(320), password: z.string().min(1).max(128) })).mutation(async ({ ctx, input }) => {
-      let authUser;
-      try { authUser = await signInAccount(input.email, input.password, ctx.req, ctx.res); }
-      catch { throw new TRPCError({ code: "UNAUTHORIZED", message: "Email or password is incorrect, or email confirmation is still required." }); }
-      const identity = supabaseIdentity(authUser);
-      await db.upsertUser({ ...identity, loginMethod: "supabase", lastSignedIn: new Date() });
-      return { success: true } as const;
-    }),
-    confirmSession: publicProcedure.input(z.object({ accessToken: z.string().min(20), refreshToken: z.string().min(20) })).mutation(async ({ ctx, input }) => {
-      try {
-        const authUser = await establishSupabaseSession(input.accessToken, input.refreshToken, ctx.req, ctx.res);
-        await db.upsertUser({ ...supabaseIdentity(authUser), loginMethod: "supabase", lastSignedIn: new Date() });
+      }),
+    login: publicProcedure
+      .input(
+        z.object({
+          email: z.string().email().max(320),
+          password: z.string().min(1).max(128),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        let authUser;
+        try {
+          authUser = await signInAccount(
+            input.email,
+            input.password,
+            ctx.req,
+            ctx.res
+          );
+        } catch {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message:
+              "Email or password is incorrect, or email confirmation is still required.",
+          });
+        }
+        const identity = supabaseIdentity(authUser);
+        await db.upsertUser({
+          ...identity,
+          loginMethod: "supabase",
+          lastSignedIn: new Date(),
+        });
         return { success: true } as const;
-      } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "This email confirmation link is invalid or expired. Request a new link and try again." }); }
-    }),
-    requestPasswordReset: publicProcedure.input(z.object({ email: z.string().email().max(320) })).mutation(async ({ ctx, input }) => {
-      const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
-      try { await sendPasswordReset(input.email, origin); } catch { /* Keep responses indistinguishable for unknown emails. */ }
-      return { success: true } as const;
-    }),
-    updatePassword: publicProcedure.input(z.object({ accessToken: z.string().min(20), refreshToken: z.string().min(20), password: z.string().min(12).max(128) })).mutation(async ({ ctx, input }) => {
-      try {
-        const authUser = await changePassword(input.accessToken, input.refreshToken, input.password, ctx.req, ctx.res);
-        await db.upsertUser({ ...supabaseIdentity(authUser), loginMethod: "supabase", lastSignedIn: new Date() });
+      }),
+    confirmSession: publicProcedure
+      .input(
+        z.object({
+          accessToken: z.string().min(20),
+          refreshToken: z.string().min(20),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const authUser = await establishSupabaseSession(
+            input.accessToken,
+            input.refreshToken,
+            ctx.req,
+            ctx.res
+          );
+          await db.upsertUser({
+            ...supabaseIdentity(authUser),
+            loginMethod: "supabase",
+            lastSignedIn: new Date(),
+          });
+          return { success: true } as const;
+        } catch {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "This email confirmation link is invalid or expired. Request a new link and try again.",
+          });
+        }
+      }),
+    requestPasswordReset: publicProcedure
+      .input(z.object({ email: z.string().email().max(320) }))
+      .mutation(async ({ ctx, input }) => {
+        const origin = sameOriginUrl(ctx.req);
+        try {
+          if (origin)
+            await sendPasswordReset(
+              input.email,
+              new URL("/", origin).toString()
+            );
+        } catch {
+          /* Keep responses indistinguishable for unknown emails. */
+        }
         return { success: true } as const;
-      } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "This password reset link is invalid or expired. Request a new one and try again." }); }
-    }),
+      }),
+    updatePassword: publicProcedure
+      .input(
+        z.object({
+          accessToken: z.string().min(20),
+          refreshToken: z.string().min(20),
+          password: z.string().min(12).max(128),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const authUser = await changePassword(
+            input.accessToken,
+            input.refreshToken,
+            input.password,
+            ctx.req,
+            ctx.res
+          );
+          await db.upsertUser({
+            ...supabaseIdentity(authUser),
+            loginMethod: "supabase",
+            lastSignedIn: new Date(),
+          });
+          return { success: true } as const;
+        } catch {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "This password reset link is invalid or expired. Request a new one and try again.",
+          });
+        }
+      }),
     me: publicProcedure.query(async ({ ctx }) => {
       if (!ctx.user) return null;
       const access = await db
@@ -299,8 +426,12 @@ const appRouter = router({
       }),
     logout: publicProcedure.mutation(async ({ ctx }) => {
       const cookies = parseCookieHeader(ctx.req.headers.cookie ?? "");
-      try { if (cookies[COOKIE_NAME]) await revokeSession(cookies[COOKIE_NAME], cookies[REFRESH_COOKIE]); }
-      finally { clearAuthCookies(ctx.res, ctx.req); }
+      try {
+        if (cookies[COOKIE_NAME])
+          await revokeSession(cookies[COOKIE_NAME], cookies[REFRESH_COOKIE]);
+      } finally {
+        clearAuthCookies(ctx.res, ctx.req);
+      }
       return { success: true } as const;
     }),
   }),
@@ -687,18 +818,21 @@ const appRouter = router({
             );
           return { id: entry.id, saved: true };
         }
-        const inserted = await database.insert(portfolioEntries).values({
-          institutionId: tenant,
-          userId: ctx.user.id,
-          kind: input.kind,
-          title: input.title,
-          subject: input.subject,
-          className: input.className,
-          lessonDate: input.lessonDate,
-          payload: input.payload,
-          status: "draft",
-          version: 1,
-        }).returning({ id: portfolioEntries.id });
+        const inserted = await database
+          .insert(portfolioEntries)
+          .values({
+            institutionId: tenant,
+            userId: ctx.user.id,
+            kind: input.kind,
+            title: input.title,
+            subject: input.subject,
+            className: input.className,
+            lessonDate: input.lessonDate,
+            payload: input.payload,
+            status: "draft",
+            version: 1,
+          })
+          .returning({ id: portfolioEntries.id });
         return { id: inserted[0]!.id, saved: true };
       }),
     submit: requireRoles("student_teacher")
@@ -779,7 +913,8 @@ const appRouter = router({
                   entry.status as "draft" | "revision_required"
                 )
               )
-            ).returning({ id: portfolioEntries.id });
+            )
+            .returning({ id: portfolioEntries.id });
           if (affectedRowCount(updateResult) !== 1)
             throw new TRPCError({
               code: "CONFLICT",
@@ -999,7 +1134,8 @@ const appRouter = router({
                   entry.status as "submitted" | "resubmitted"
                 )
               )
-            ).returning({ id: portfolioEntries.id });
+            )
+            .returning({ id: portfolioEntries.id });
           if (affectedRowCount(updateEntry) !== 1)
             throw new TRPCError({
               code: "CONFLICT",
@@ -1016,7 +1152,8 @@ const appRouter = router({
                 eq(submissionVersions.version, entry.version),
                 inArray(submissionVersions.status, ["submitted", "resubmitted"])
               )
-            ).returning({ id: submissionVersions.id });
+            )
+            .returning({ id: submissionVersions.id });
           if (affectedRowCount(updateSnapshot) !== 1)
             throw new TRPCError({
               code: "CONFLICT",
@@ -1101,7 +1238,8 @@ const appRouter = router({
                   "under_review",
                 ])
               )
-            ).returning({ id: portfolioEntries.id });
+            )
+            .returning({ id: portfolioEntries.id });
           if (affectedRowCount(updateEntry) !== 1)
             throw new TRPCError({
               code: "CONFLICT",
@@ -1122,7 +1260,8 @@ const appRouter = router({
                   "under_review",
                 ])
               )
-            ).returning({ id: submissionVersions.id });
+            )
+            .returning({ id: submissionVersions.id });
           if (affectedRowCount(updateVersion) !== 1)
             throw new TRPCError({
               code: "CONFLICT",
@@ -1253,11 +1392,17 @@ const appRouter = router({
           .where(eq(placements.institutionId, tenant))
           .orderBy(desc(placements.startDate), desc(placements.id))
           .limit(1000);
-        const ids = [...new Set(rows.flatMap(row => [
-          row.studentUserId,
-          row.supervisorUserId,
-          row.lecturerUserId,
-        ]).filter((id): id is number => id !== null))];
+        const ids = [
+          ...new Set(
+            rows
+              .flatMap(row => [
+                row.studentUserId,
+                row.supervisorUserId,
+                row.lecturerUserId,
+              ])
+              .filter((id): id is number => id !== null)
+          ),
+        ];
         const people = ids.length
           ? await database
               .select({ id: users.id, name: users.name, email: users.email })
@@ -1270,10 +1415,10 @@ const appRouter = router({
           studentName: byId.get(row.studentUserId)?.name ?? "Student teacher",
           studentEmail: byId.get(row.studentUserId)?.email ?? "",
           supervisorName: row.supervisorUserId
-            ? byId.get(row.supervisorUserId)?.name ?? "Supervisor"
+            ? (byId.get(row.supervisorUserId)?.name ?? "Supervisor")
             : null,
           lecturerName: row.lecturerUserId
-            ? byId.get(row.lecturerUserId)?.name ?? "Lecturer"
+            ? (byId.get(row.lecturerUserId)?.name ?? "Lecturer")
             : null,
         }));
       }
@@ -1293,18 +1438,14 @@ const appRouter = router({
           if (userId === null && role !== "student_teacher") return;
           if (userId === null) throw new TRPCError({ code: "BAD_REQUEST" });
           const found = await database
-            .select({ id: accessAssignments.id })
+            .select({
+              institutionId: accessAssignments.institutionId,
+              role: accessAssignments.role,
+              status: accessAssignments.status,
+            })
             .from(accessAssignments)
-            .where(
-              and(
-                eq(accessAssignments.userId, userId),
-                eq(accessAssignments.institutionId, tenant),
-                eq(accessAssignments.role, role),
-                eq(accessAssignments.status, "active")
-              )
-            )
-            .limit(1);
-          if (!found.length)
+            .where(eq(accessAssignments.userId, userId));
+          if (!hasActivePlacementRole(found, tenant, role))
             throw new TRPCError({
               code: "BAD_REQUEST",
               message: `Choose an active ${role.replaceAll("_", " ")} assigned to this institution.`,
@@ -1320,22 +1461,46 @@ const appRouter = router({
           await tx.execute(
             sql`select pg_advisory_xact_lock(${tenant}, ${input.studentUserId})`
           );
-          const matching = await tx
-            .select()
+          const existingRows = input.id
+            ? await tx
+                .select()
+                .from(placements)
+                .where(
+                  and(
+                    eq(placements.id, input.id),
+                    eq(placements.institutionId, tenant)
+                  )
+                )
+                .limit(1)
+            : [];
+          const existing = existingRows[0];
+          if (input.id && !existing)
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Placement not found in this institution.",
+            });
+          const duplicate = await tx
+            .select({ id: placements.id })
             .from(placements)
             .where(
               and(
                 eq(placements.institutionId, tenant),
-                eq(placements.studentUserId, input.studentUserId)
+                eq(placements.studentUserId, input.studentUserId),
+                ...(input.id ? [sql`${placements.id} <> ${input.id}`] : [])
               )
-            );
-          const existing = input.id
-            ? matching.find(row => row.id === input.id)
-            : undefined;
-          if (input.id && !existing)
-            throw new TRPCError({ code: "NOT_FOUND", message: "Placement not found in this institution." });
-          if (matching.some(row => row.id !== input.id))
-            throw new TRPCError({ code: "CONFLICT", message: "This student already has a placement. Edit the existing placement instead." });
+            )
+            .limit(1);
+          if (
+            hasPlacementConflict(
+              duplicate.map(row => row.id),
+              input.id
+            )
+          )
+            throw new TRPCError({
+              code: "CONFLICT",
+              message:
+                "This student already has a placement. Edit the existing placement instead.",
+            });
 
           const values = {
             institutionId: tenant,
@@ -1353,22 +1518,38 @@ const appRouter = router({
             lecturerUserId: input.lecturerUserId,
             status: input.status,
           };
-          const changed = !existing || Object.entries(values).some(([key, value]) =>
-            JSON.stringify(existing[key as keyof typeof existing]) !== JSON.stringify(value)
-          );
+          const changed =
+            !existing ||
+            Object.entries(values).some(
+              ([key, value]) =>
+                JSON.stringify(existing[key as keyof typeof existing]) !==
+                JSON.stringify(value)
+            );
           let placementId: number;
           if (existing) {
             placementId = existing.id;
             if (changed)
-              await tx.update(placements).set(values).where(
-                and(eq(placements.id, existing.id), eq(placements.institutionId, tenant))
-              );
+              await tx
+                .update(placements)
+                .set(values)
+                .where(
+                  and(
+                    eq(placements.id, existing.id),
+                    eq(placements.institutionId, tenant)
+                  )
+                );
           } else {
-            const inserted = await tx.insert(placements).values(values).returning({ id: placements.id });
+            const inserted = await tx
+              .insert(placements)
+              .values(values)
+              .returning({ id: placements.id });
             placementId = inserted[0]!.id;
           }
           if (changed) {
-            const recipients = new Map<number, { type: string; message: string; href: string }>();
+            const recipients = new Map<
+              number,
+              { type: string; message: string; href: string }
+            >();
             recipients.set(input.studentUserId, {
               type: "placement",
               message: `Your teaching-practice placement at ${input.schoolName} has been ${existing ? "updated" : "assigned"}.`,
@@ -1544,12 +1725,15 @@ const appRouter = router({
           throw new TRPCError({ code: "FORBIDDEN" });
         const database = await db.getDb();
         if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
-        const inserted = await database.insert(institutions).values({
-          name: input.name,
-          code: input.code,
-          isDemo: false,
-          active: true,
-        }).returning({ id: institutions.id });
+        const inserted = await database
+          .insert(institutions)
+          .values({
+            name: input.name,
+            code: input.code,
+            isDemo: false,
+            active: true,
+          })
+          .returning({ id: institutions.id });
         const institutionId = inserted[0]!.id;
         await database.insert(portfolioRequirements).values([
           {
@@ -1700,14 +1884,17 @@ const appRouter = router({
         }
         const token = randomBytes(32).toString("base64url");
         const tokenHash = createHash("sha256").update(token).digest("hex");
-        const inserted = await database.insert(invitations).values({
-          institutionId: tenant,
-          email: input.email.trim().toLowerCase(),
-          role: input.role,
-          tokenHash,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          createdBy: ctx.user.id,
-        }).returning({ id: invitations.id });
+        const inserted = await database
+          .insert(invitations)
+          .values({
+            institutionId: tenant,
+            email: input.email.trim().toLowerCase(),
+            role: input.role,
+            tokenHash,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            createdBy: ctx.user.id,
+          })
+          .returning({ id: invitations.id });
         await db.writeAudit({
           institutionId: tenant,
           actorUserId: ctx.user.id,

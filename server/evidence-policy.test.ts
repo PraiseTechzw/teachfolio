@@ -43,9 +43,19 @@ describe("server-side evidence upload validation", () => {
   });
 
   it("validates upload metadata separately from the streamed file signature", () => {
-    expect(validateEvidenceMetadata({ fileName: "clip.mp4", mimeType: "video/mp4", byteSize: 12 })).toBeNull();
-    expect(validateEvidenceSignature("video/mp4", Buffer.from("0000ftyp"))).toContain("contents do not match");
-    expect(validateEvidenceSignature("video/mp4", Buffer.from("0000ftypisom"))).toBeNull();
+    expect(
+      validateEvidenceMetadata({
+        fileName: "clip.mp4",
+        mimeType: "video/mp4",
+        byteSize: 12,
+      })
+    ).toBeNull();
+    expect(
+      validateEvidenceSignature("video/mp4", Buffer.from("0000ftyp"))
+    ).toContain("contents do not match");
+    expect(
+      validateEvidenceSignature("video/mp4", Buffer.from("0000ftypisom!"))
+    ).toBeNull();
   });
 });
 
@@ -92,9 +102,9 @@ describe("private evidence access policy", () => {
 
   it("requires a same-institution assignment and a submitted snapshot for reviewers", () => {
     expect(canAccessEvidenceFile(base)).toBe(true);
-    expect(
-      canAccessEvidenceFile({ ...base, fileInstitutionId: 9 })
-    ).toBe(false);
+    expect(canAccessEvidenceFile({ ...base, fileInstitutionId: 9 })).toBe(
+      false
+    );
     expect(
       canAccessEvidenceFile({ ...base, appearsInSubmittedHistory: false })
     ).toBe(false);

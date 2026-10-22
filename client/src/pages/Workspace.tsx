@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  PlacementManagementDashboard,
   PlatformInstitutionDashboard,
   UserActivationDashboard,
 } from "@/components/AdminDashboards";
@@ -140,6 +141,7 @@ const titleFor = (path: string) =>
       "/notifications": "Notifications",
       "/settings": "Settings",
       "/admin/users": "User administration",
+      "/admin/placements": "Placement management",
       "/admin/requirements": "Portfolio requirements",
       "/admin/audit-logs": "Audit log",
       "/admin/institutions": "Institution onboarding",
@@ -1077,6 +1079,13 @@ export default function Workspace({
       <UserActivationDashboard
         allowed={isInstitutionAdmin}
         currentUserId={user.id}
+      />
+    );
+
+  if (path === "/admin/placements")
+    return (
+      <PlacementManagementDashboard
+        allowed={isInstitutionAdmin || isCoordinator}
       />
     );
 

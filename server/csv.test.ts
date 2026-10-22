@@ -8,7 +8,7 @@ describe("spreadsheet-safe CSV fields", () => {
 
   it("neutralizes formula prefixes including leading whitespace", () => {
     for (const value of ["=1+1", "+SUM(A1:A2)", "-2+3", "@SUM(A1)", "\t=1+1"]) {
-      expect(csvCell(value).startsWith('"\'')).toBe(true);
+      expect(csvCell(value).startsWith("\"'")).toBe(true);
     }
   });
 

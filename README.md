@@ -11,7 +11,9 @@ Create a Supabase project, then copy `.env.example` to `.env` and fill in:
 - The PostgreSQL connection string from Project Settings → Database. Keep `sslmode=require` enabled.
 - A random `SESSION_SECRET` of at least 32 bytes, used to sign CSRF tokens.
 
-In Supabase Auth, enable email/password sign-in and email confirmation. Set the Site URL to the app's public origin and add that origin to the allowed redirect URLs. In Storage, create a **private** bucket named `teachfolio-evidence` and set its size limit to 25 MiB. The application accesses the bucket from its server and checks institution, placement and submission authorization before returning media. The server secret bypasses Storage RLS and must remain private. See [Supabase Auth server guidance](https://supabase.com/docs/guides/auth/server-side/creating-a-client), [Storage access control](https://supabase.com/docs/guides/storage/security/access-control), and [private downloads](https://supabase.com/docs/guides/storage/serving/downloads).
+In Supabase Auth, enable email/password sign-in and email confirmation. Set the Site URL to the app's public origin and add that origin to the allowed redirect URLs. In Storage, create a **private** bucket named `teachfolio-evidence`, set its size limit to 25 MiB, and allow PDF, DOCX, XLSX, PPTX, JPEG, PNG, and MP4 MIME types. Keep the bucket private: the backend checks this setting before upload and signed downloads. Evidence access is checked by the server against institution, placement assignment, ownership, and submitted-version history; the server secret bypasses Storage RLS and must remain private. Uploads are streamed through the server with a 25 MiB cap. Images preview in the record; MP4 playback uses authenticated byte-range requests. See [Supabase Auth server guidance](https://supabase.com/docs/guides/auth/server-side/creating-a-client), [Storage access control](https://supabase.com/docs/guides/storage/security/access-control), and [private downloads](https://supabase.com/docs/guides/storage/serving/downloads).
+
+The PostgreSQL tables have RLS enabled, but this application does not configure per-user Postgres policies or send browser queries to those tables. The server connects with a privileged database role and enforces authorization in its tRPC and evidence routes. Keep `DATABASE_URL` server-only. Do not add browser access to application tables or switch the server to a non-bypassing database role without adding and testing transaction-scoped RLS policies first. The Storage bucket remains private and has no public-object access policy.
 
 ## Install and run
 
@@ -27,12 +29,11 @@ Open `http://localhost:3000`. New accounts use Supabase Auth email/password and 
 
 ## Access bootstrap
 
-The first platform administrator must be provisioned by a trusted operator after the target user registers and signs in. Find that user's `openId` in the `users` table, then run this server-side against the configured Supabase database:
+The first platform administrator must be provisioned by a trusted operator after the target user registers and signs in. Verify that user's `openId` in the `users` table, set it in a local shell variable, then run this server-side against the configured Supabase database:
 
 ```sh
-pnpm provision:platform-admin e1416b2e-3a0b-41fe-b78d-10b5b61372e0 --confirm-trusted-platform-admin
-
-e1416b2e-3a0b-41fe-b78d-10b5b61372e0
+REGISTERED_USER_OPEN_ID='replace-with-the-verified-users.openId'
+pnpm provision:platform-admin "$REGISTERED_USER_OPEN_ID" --confirm-trusted-platform-admin
 ```
 
 This adds a platform-wide assignment and audit record. Never expose the command through a public endpoint. Platform administrators create institutions and issue invitations. Institution administrators can invite users only to their institution. Invitations are single-use, role- and institution-bound, expire after seven days, and match the exact email. Share invitation tokens only through an institution-approved secure channel.
@@ -44,7 +45,7 @@ For fictional sample data, run `pnpm seed:demo --confirm-fictional-demo-seed`. T
 - `pnpm dev` — development server
 - `pnpm build` / `pnpm start` — production build and server
 - `pnpm check` — TypeScript check
-- `pnpm test` — application unit tests
+- `pnpm test` — application unit tests (uses a test-only CSRF key; no production `.env` is required)
 - `pnpm db:generate` — generate a Drizzle PostgreSQL migration
 - `pnpm db:migrate` — apply generated migrations
 
