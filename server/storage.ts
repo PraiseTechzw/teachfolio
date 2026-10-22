@@ -34,9 +34,7 @@ async function assertPrivateBucket(config: ReturnType<typeof storageConfig>) {
     { headers: authHeaders(config.secret) }
   );
   if (!response.ok) {
-    throw new Error(
-      "Supabase Storage bucket configuration could not be verified."
-    );
+    throw new Error(`Storage bucket check failed (${response.status}).`);
   }
   const bucket = (await response.json()) as { public?: unknown };
   if (bucket.public !== false) {
@@ -73,10 +71,7 @@ export async function storagePut(
     ...(streaming ? { duplex: "half" } : {}),
   } as RequestInit & { duplex?: "half" });
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(
-      `Supabase Storage upload failed (${response.status}): ${detail.slice(0, 300)}`
-    );
+    throw new Error(`Storage upload request failed (${response.status}).`);
   }
   return { key, url: key };
 }
@@ -113,10 +108,7 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
     body: JSON.stringify({ expiresIn: 60 }),
   });
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(
-      `Supabase Storage signing failed (${response.status}): ${detail.slice(0, 300)}`
-    );
+    throw new Error(`Storage signing request failed (${response.status}).`);
   }
   const result = (await response.json()) as { signedURL?: string };
   if (!result.signedURL)

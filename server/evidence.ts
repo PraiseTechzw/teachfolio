@@ -146,7 +146,11 @@ export function registerEvidenceRoutes(app: Express) {
       let stored: { key: string };
       try {
         stored = await storagePut(key, requestBody, mime, contentLength);
-      } catch {
+      } catch (error) {
+        console.error(
+          "[Evidence] private storage rejected the upload:",
+          error instanceof Error ? error.message : "unknown storage error"
+        );
         return fail(
           res,
           503,

@@ -18,7 +18,7 @@ Use a dedicated, non-production Supabase project and synthetic data only. This c
 - [ ] Configure Auth email/password, confirmation, Site URL, and allowed redirect URLs for the staging origin, including `<APP_BASE_URL>/?invite=*` so invitation tokens survive confirmation/recovery redirects.
 - [ ] Configure a Resend-verified sender domain, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `APP_BASE_URL`; configure Supabase Auth SMTP through Resend for confirmation and password-recovery mail.
 - [ ] Register a synthetic account and confirm the Supabase confirmation email returns to the staging app; verify resend-confirmation and password-reset messages arrive and their links work.
-- [ ] Create the `teachfolio-evidence` bucket as private with a 25 MiB limit and exactly these MIME types: PDF, DOCX, XLSX, PPTX, JPEG, PNG, MP4.
+- [ ] Apply the reviewed migrations to staging. Migration `0001_private_evidence_bucket.sql` creates or enforces the private `teachfolio-evidence` bucket, 25 MiB limit, and PDF, DOCX, XLSX, PPTX, JPEG, PNG, and MP4 MIME allowlist; then confirm those settings with `pnpm verify:staging`.
 - [ ] Start with the local checks:
 
   ```sh
