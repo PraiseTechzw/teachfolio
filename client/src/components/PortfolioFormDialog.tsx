@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { importSchemeDocx, type ImportedSchemeWeek } from "@/lib/scheme-docx-import";
+import { useConfirmation } from "@/hooks/use-confirmation";
 
 type Kind =
   | "scheme"
@@ -281,6 +282,7 @@ export default function PortfolioFormDialog({
   const [dirty, setDirty] = useState(false);
   const [schemeImporting, setSchemeImporting] = useState(false);
   const [schemeImportMessage, setSchemeImportMessage] = useState("");
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const uploadRequest = useRef<XMLHttpRequest | null>(null);
   const save = trpc.portfolio.saveDraft.useMutation();
   const submit = trpc.portfolio.submit.useMutation();
@@ -608,13 +610,24 @@ export default function PortfolioFormDialog({
       request.send(selected);
     });
 
-  const requestClose = () => {
+  const requestClose = async () => {
     if (progress !== null || save.isPending || submit.isPending) return;
-    if (dirty && !window.confirm("Discard the unsaved changes in this form?"))
-      return;
+    if (
+      dirty &&
+      !(await confirm({
+        title: "Discard unsaved changes?",
+        description: "Your edits have not been saved. If you leave now, those changes will be lost.",
+        confirmLabel: "Discard changes",
+        destructive: true,
+      }))
+    ) return;
     onClose();
   };
-  const saveEntry = async (submitAfter: boolean, uploadAfterSave = false) => {
+  const saveEntry = async (
+    submitAfter: boolean,
+    uploadAfterSave = false,
+    submissionConfirmed = false
+  ) => {
     setError("");
     const invalid = validateLocal(submitAfter);
     if (invalid) {
@@ -632,9 +645,12 @@ export default function PortfolioFormDialog({
     }
     if (
       submitAfter &&
-      !window.confirm(
-        "Submit this version for review? The submitted snapshot will be locked while it is under review."
-      )
+      !submissionConfirmed &&
+      !(await confirm({
+        title: "Submit this version for review?",
+        description: "The submitted snapshot will be locked while it is under review.",
+        confirmLabel: "Submit for review",
+      }))
     )
       return;
     const mergedPayload = { ...payload };
@@ -693,6 +709,8 @@ export default function PortfolioFormDialog({
 
   if (!open) return null;
   return (
+    <>
+    {confirmationDialog}
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
       role="presentation"
@@ -1742,5 +1760,6 @@ export default function PortfolioFormDialog({
         </div>
       </section>
     </div>
+    </>
   );
 }

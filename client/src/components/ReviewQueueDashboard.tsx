@@ -8,6 +8,7 @@ import {
 } from "@shared/review-rubric";
 import { trpc } from "@/lib/trpc";
 import { PortfolioStructuredDetails } from "@/components/PortfolioRecordDetails";
+import { useConfirmation } from "@/hooks/use-confirmation";
 
 type Decision = "approved" | "revision_required" | "rejected";
 type Draft = {
@@ -50,6 +51,7 @@ export default function ReviewQueueDashboard({
   const [notice, setNotice] = useState("");
   const [decisionError, setDecisionError] = useState("");
   const [startError, setStartError] = useState("");
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const startReview = trpc.review.start.useMutation({
     onSuccess: async (_result, input) => {
       setNotice("Review started. The submitted snapshot remains read-only.");
@@ -143,7 +145,7 @@ export default function ReviewQueueDashboard({
     setStartError("");
   };
 
-  const submitDecision = (item: (typeof items)[number], decision: Decision) => {
+  const submitDecision = async (item: (typeof items)[number], decision: Decision) => {
     const draft = drafts[item.id] ?? blankDraft();
     if (REVIEW_RUBRIC.some(criterion => draft.scores[criterion.id] === null)) {
       setFormErrors(current => ({
@@ -160,11 +162,12 @@ export default function ReviewQueueDashboard({
       }));
       return;
     }
-    if (
-      !window.confirm(
-        `Confirm that you want to ${decisionLabel[decision]} for version ${item.version}? The decision, rubric and feedback will be recorded in review history.`
-      )
-    )
+    if (!(await confirm({
+      title: "Record review decision?",
+      description: `You are about to ${decisionLabel[decision]} for version ${item.version}. The decision, rubric and feedback will be recorded in review history.`,
+      confirmLabel: "Record decision",
+      destructive: decision === "rejected",
+    })))
       return;
     setDecisionError("");
     const rubricScores = REVIEW_RUBRIC.map(criterion => ({
@@ -181,6 +184,8 @@ export default function ReviewQueueDashboard({
   };
 
   return (
+    <>
+    {confirmationDialog}
     <section className="space-y-5" aria-labelledby="review-queue-heading">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -583,5 +588,6 @@ export default function ReviewQueueDashboard({
         </>
       )}
     </section>
+    </>
   );
 }
