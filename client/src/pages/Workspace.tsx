@@ -25,6 +25,7 @@ import {
 import StudentPortfolioModule from "@/components/StudentPortfolioModule";
 import ReviewQueueDashboard from "@/components/ReviewQueueDashboard";
 import ReviewHistoryTimeline from "@/components/ReviewHistoryTimeline";
+import PlatformAdminOverview from "@/components/PlatformAdminOverview";
 import {
   PortfolioStructuredDetails,
   SubmissionHistoryList,
@@ -1368,6 +1369,9 @@ export default function Workspace({
     0
   );
   const isInstitutionScoped = user.institutionId !== null;
+  if (path === "/" && isPlatformAdmin && !isInstitutionScoped)
+    return <PlatformAdminOverview name={user.name} onNavigate={onNavigate} />;
+
   return (
     <>
       <PageTitle

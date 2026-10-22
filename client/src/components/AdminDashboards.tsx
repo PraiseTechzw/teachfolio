@@ -889,7 +889,7 @@ export function PlatformInstitutionDashboard({
                     <p className="mt-1 truncate text-xs text-slate-500">
                       {row.code} · ID {row.id} · created{" "}
                       {dateLabel(row.createdAt)}
-                      {row.isDemo ? " · reserved demo tenant" : ""}
+                      {row.isDemo ? " · reserved practice workspace" : ""}
                     </p>
                   </div>
                 </div>

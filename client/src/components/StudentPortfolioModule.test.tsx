@@ -50,7 +50,9 @@ describe("StudentPortfolioModule outage behavior", () => {
     );
 
     expect(markup).toContain("Authorized portfolio data could not be verified.");
-    expect(markup).toContain("No sample records are substituted");
+    expect(markup).toContain(
+      "No portfolio records are shown when access or validation cannot be confirmed."
+    );
     expect(markup).not.toContain("Fractions and equivalent values");
     expect(markup).not.toContain("Fictional Practice School");
     expect(markup).not.toContain("DEMO MODE");

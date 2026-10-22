@@ -733,7 +733,7 @@ export default function App() {
           <p
             className={`px-2 pb-1 text-[10px] text-slate-400 ${sidebarExpanded ? "" : "lg:hidden"}`}
           >
-            Secure portfolio · demo content not institutional results
+            Student Teacher E-Portfolio · institution-scoped access
           </p>
         </div>
       </aside>
@@ -1023,7 +1023,8 @@ export default function App() {
               <p>
                 Contact your institution administrator for access changes,
                 portfolio requirements, placement questions, or an invitation.
-                This prototype does not send email or SMS.
+                Invitations must be shared through an approved secure channel.
+                Email and SMS delivery are not available.
               </p>
             </div>
             <button

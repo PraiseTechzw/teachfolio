@@ -191,8 +191,8 @@ export default function StudentPortfolioModule({
         Authorized portfolio data could not be verified.
       </strong>
       <span className="mt-1 block">
-        No sample records are substituted for access or validation errors.
-        Refresh the page or contact your institution administrator.
+        No portfolio records are shown when access or validation cannot be
+        confirmed. Refresh the page or contact your institution administrator.
       </span>
     </div>
   ) : overview.data?.demoLabel ? (
@@ -200,10 +200,10 @@ export default function StudentPortfolioModule({
       role="status"
       className="mb-5 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950"
     >
-      <strong className="block font-bold">CONNECTED DEMO TENANT</strong>
+      <strong className="block font-bold">PRACTICE WORKSPACE</strong>
       <span className="mt-1 block">
-        This institution is explicitly marked as a fictional sample dataset.
-        Authorized changes in this tenant are still saved through the configured
+        This workspace contains fictional practice records, not institutional
+        assessment results. Authorized changes are saved through the configured
         backend.
       </span>
     </div>
