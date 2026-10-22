@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { and, asc, count, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, isNull, like, or, sql } from "drizzle-orm";
 import {
   accessAssignments,
   auditLogs,
@@ -1438,6 +1438,27 @@ const appRouter = router({
       }),
   }),
   admin: router({
+    dashboardSummary: requireRoles("institution_admin").query(async ({ ctx }) => {
+      const tenant = ctx.appAccess.institutionId;
+      if (tenant === null) throw new TRPCError({ code: "FORBIDDEN" });
+      const database = await db.getDb();
+      if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+      const now = new Date();
+      const [activeAssignments, pendingInvitations, activePlacements, unassignedPlacements, portfolioStatuses] = await Promise.all([
+        database.select({ total: count() }).from(accessAssignments).where(and(eq(accessAssignments.institutionId, tenant), eq(accessAssignments.status, "active"))),
+        database.select({ total: count() }).from(invitations).where(and(eq(invitations.institutionId, tenant), isNull(invitations.acceptedAt), gt(invitations.expiresAt, now))),
+        database.select({ total: count() }).from(placements).where(and(eq(placements.institutionId, tenant), eq(placements.status, "active"))),
+        database.select({ total: count() }).from(placements).where(and(eq(placements.institutionId, tenant), or(isNull(placements.supervisorUserId), isNull(placements.lecturerUserId)))),
+        database.select({ status: portfolioEntries.status, total: count() }).from(portfolioEntries).where(eq(portfolioEntries.institutionId, tenant)).groupBy(portfolioEntries.status),
+      ]);
+      return {
+        activeAssignments: Number(activeAssignments[0]?.total ?? 0),
+        pendingInvitations: Number(pendingInvitations[0]?.total ?? 0),
+        activePlacements: Number(activePlacements[0]?.total ?? 0),
+        unassignedPlacements: Number(unassignedPlacements[0]?.total ?? 0),
+        portfolioStatuses: portfolioStatuses.map(row => ({ status: row.status, count: Number(row.total) })),
+      };
+    }),
     placementOptions: requireRoles("coordinator", "institution_admin").query(
       async ({ ctx }) => {
         const tenant = ctx.appAccess.institutionId;

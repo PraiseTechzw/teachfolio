@@ -22,6 +22,7 @@ import {
   PlatformInstitutionDashboard,
   UserActivationDashboard,
 } from "@/components/AdminDashboards";
+import InstitutionAdminOverview from "@/components/InstitutionAdminOverview";
 import StudentPortfolioModule from "@/components/StudentPortfolioModule";
 import ReviewQueueDashboard from "@/components/ReviewQueueDashboard";
 import ReviewHistoryTimeline from "@/components/ReviewHistoryTimeline";
@@ -1370,6 +1371,13 @@ export default function Workspace({
   const isInstitutionScoped = user.institutionId !== null;
   if (path === "/" && isPlatformAdmin && !isInstitutionScoped)
     return <PlatformInstitutionDashboard allowed={isPlatformAdmin} />;
+  if (path === "/" && isInstitutionAdmin)
+    return (
+      <InstitutionAdminOverview
+        name={user.name}
+        onNavigate={onNavigate}
+      />
+    );
 
   return (
     <>

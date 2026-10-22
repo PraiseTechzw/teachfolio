@@ -168,19 +168,6 @@ const navBase = [
     roles: ["coordinator", "institution_admin"],
   },
   {
-    label: "Notifications",
-    path: "/notifications",
-    icon: Bell,
-    roles: [
-      "student_teacher",
-      "supervisor",
-      "lecturer",
-      "coordinator",
-      "institution_admin",
-      "platform_admin",
-    ],
-  },
-  {
     label: "User activation",
     path: "/admin/users",
     icon: UserRoundCheck,
@@ -230,7 +217,6 @@ function Brand({ compact = false }: { compact?: boolean }) {
 }
 function navigationSection(label: string) {
   if (label === "Overview" || label === "Institutions") return "MENU";
-  if (label === "Notifications") return "SUPPORT";
   if (
     [
       "My placement",
@@ -699,11 +685,6 @@ export default function App() {
                   >
                     {item.label}
                   </span>
-                  {item.path === "/notifications" && unread > 0 && (
-                    <span className="grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
-                      {unread > 9 ? "9+" : unread}
-                    </span>
-                  )}
                 </button>
               </div>
             );
