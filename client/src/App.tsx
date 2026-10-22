@@ -229,7 +229,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
   );
 }
 function navigationSection(label: string) {
-  if (label === "Overview") return "MENU";
+  if (label === "Overview" || label === "Institutions") return "MENU";
   if (label === "Notifications") return "SUPPORT";
   if (
     [
@@ -509,7 +509,11 @@ export default function App() {
     setSearch("");
   }, [path]);
   useEffect(() => {
-    if (access?.activated && access.roles.includes("platform_admin") && path === "/")
+    if (
+      access?.activated &&
+      access.roles.includes("platform_admin") &&
+      path === "/"
+    )
       navigate("/admin/institutions");
   }, [access?.activated, access?.roles, navigate, path]);
   useEffect(() => {

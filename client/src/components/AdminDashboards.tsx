@@ -642,8 +642,9 @@ export function PlatformInstitutionDashboard({
   const [token, setToken] = useState("");
   const [institutionError, setInstitutionError] = useState("");
   useEffect(() => {
-    if (selectedId === undefined && institutions.data?.[0])
-      setSelectedId(institutions.data[0].id);
+    const firstInstitution = institutions.data?.find(row => !row.isDemo);
+    if (selectedId === undefined && firstInstitution)
+      setSelectedId(firstInstitution.id);
   }, [selectedId, institutions.data]);
   const invitations = trpc.admin.invitations.useQuery(
     { institutionId: selectedId },
@@ -694,7 +695,7 @@ export function PlatformInstitutionDashboard({
       <>
         <SectionHeading
           eyebrow="PLATFORM ADMINISTRATION"
-          title="Institution administration"
+          title="Institutions"
           description="Institution-wide onboarding and activation controls are restricted to explicitly provisioned platform administrators."
         />
         <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
@@ -713,6 +714,12 @@ export function PlatformInstitutionDashboard({
     event: React.FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
+    if (selected?.isDemo) {
+      setInstitutionError(
+        "Administrator invitations cannot be issued for a reserved practice workspace."
+      );
+      return;
+    }
     if (!selected || !selected.active) {
       setInstitutionError(
         "Choose an active institution before issuing its first administrator invitation."
@@ -772,7 +779,7 @@ export function PlatformInstitutionDashboard({
               ? "—"
               : institutionalRows.length
           }
-          detail="Institution workspaces on the platform"
+          detail="Reserved practice records are excluded"
           icon={Building2}
         />
         <Metric
@@ -826,7 +833,8 @@ export function PlatformInstitutionDashboard({
             </p>
             {rows.some(row => row.isDemo) && (
               <p className="mt-1 text-xs text-slate-500">
-                Reserved practice workspaces remain labeled and are excluded from institution totals.
+                Reserved practice workspaces remain labeled and are excluded
+                from institution totals.
               </p>
             )}
           </div>
@@ -1017,13 +1025,13 @@ export function PlatformInstitutionDashboard({
         >
           <div className="flex items-center gap-2">
             <ShieldCheck size={17} className="text-indigo-600" />
-            <h2 className="font-semibold">
-              Bootstrap institution administrator
-            </h2>
+            <h2 className="font-semibold">Invite institution administrator</h2>
           </div>
           <p className="mt-2 text-xs leading-relaxed text-slate-500">
-            The platform role is fixed to institution administrator. The invited
-            Supabase email must redeem a one-time token; no email is sent.
+            Issue a single-use invitation token for the selected institution.
+            The recipient must sign in with this email and redeem the token.
+            Send it through an approved secure channel; no email is sent
+            automatically.
           </p>
           <label className="mt-4 block text-xs font-semibold text-slate-600">
             Institution
@@ -1038,6 +1046,7 @@ export function PlatformInstitutionDashboard({
               <option value="">Select an institution</option>
               {rows.map(row => (
                 <option key={row.id} value={row.id}>
+                  {row.isDemo ? "Practice workspace · " : ""}
                   {row.name} · {row.active ? "Active" : "Inactive"}
                 </option>
               ))}
@@ -1048,9 +1057,11 @@ export function PlatformInstitutionDashboard({
               className={`mt-3 rounded-xl border px-3 py-2.5 text-xs leading-relaxed ${selected.active ? "border-indigo-100 bg-indigo-50/70 text-indigo-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}
             >
               <span className="font-semibold">{selected.name}</span>
-              {selected.active
-                ? " is active and can receive its first administrator invitation."
-                : " is inactive. Reactivate it before issuing an administrator invitation."}
+              {selected.isDemo
+                ? " is a reserved practice workspace. Administrator invitations are unavailable."
+                : selected.active
+                  ? " is active and can receive its first administrator invitation."
+                  : " is inactive. Reactivate it before issuing an administrator invitation."}
             </div>
           )}
           <label className="mt-3 block text-xs font-semibold text-slate-600">
@@ -1069,7 +1080,7 @@ export function PlatformInstitutionDashboard({
           </label>
           <button
             type="submit"
-            disabled={!selected?.active || invite.isPending}
+            disabled={!selected?.active || selected.isDemo || invite.isPending}
             className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800 disabled:opacity-50"
           >
             {invite.isPending ? (
