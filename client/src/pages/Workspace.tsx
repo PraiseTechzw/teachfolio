@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useConfirmation } from "@/hooks/use-confirmation";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -149,7 +150,7 @@ const titleFor = (path: string) =>
       "/access-denied": "Access denied",
     }) as Record<string, string>
   )[path] ?? "Portfolio record";
-async function openEvidenceFile(fileId: number) {
+async function openEvidenceFile(fileId: number): Promise<string | null> {
   const tab = window.open("about:blank", "_blank");
   try {
     const response = await fetch(`/api/evidence/${fileId}/download`, {
@@ -161,13 +162,12 @@ async function openEvidenceFile(fileId: number) {
     if (tab) tab.location.href = blobUrl;
     else window.location.assign(blobUrl);
     window.setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60 * 1000);
+    return null;
   } catch (error) {
     tab?.close();
-    window.alert(
-      error instanceof Error
-        ? error.message
-        : "File access could not be authorized."
-    );
+    return error instanceof Error
+      ? error.message
+      : "File access could not be authorized.";
   }
 }
 function Status({ status }: { status: string }) {
@@ -660,7 +660,10 @@ export default function Workspace({
                       <button
                         type="button"
                         className="flex w-full items-center justify-between gap-3 text-left text-sm hover:text-indigo-700"
-                        onClick={() => void openEvidenceFile(file.id)}
+                        onClick={async () => {
+                          const error = await openEvidenceFile(file.id);
+                          if (error) setFormError(error);
+                        }}
                       >
                         <span>
                           {file.fileName}
@@ -689,7 +692,10 @@ export default function Workspace({
               <SubmissionHistoryList
                 versions={versions}
                 files={files}
-                onOpenFile={fileId => void openEvidenceFile(fileId)}
+                onOpenFile={async fileId => {
+                  const error = await openEvidenceFile(fileId);
+                  if (error) setFormError(error);
+                }}
               />
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -2067,15 +2073,22 @@ function RequirementEditor({
     deadline: string | null;
   }) => void;
 }) {
+  const { confirm, dialog } = useConfirmation();
   const [count, setCount] = useState(item.requiredCount);
   const [required, setRequired] = useState(item.required);
   const [deadline, setDeadline] = useState(item.deadline ?? "");
   return (
+    <>
+    {dialog}
     <form
       className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-[minmax(0,1fr)_110px_150px_170px] sm:items-end"
-      onSubmit={event => {
+      onSubmit={async event => {
         event.preventDefault();
-        if (!window.confirm(`Save requirement settings for ${item.label}?`))
+        if (!(await confirm({
+          title: "Save requirement settings?",
+          description: `Update the portfolio requirement settings for ${item.label}?`,
+          confirmLabel: "Save settings",
+        })))
           return;
         onSave({
           id: item.id,
@@ -2128,5 +2141,6 @@ function RequirementEditor({
         </button>
       </div>
     </form>
+    </>
   );
 }

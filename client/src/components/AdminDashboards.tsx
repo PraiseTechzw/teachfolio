@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { useConfirmation } from "@/hooks/use-confirmation";
 
 type InvitationStatus = "pending_activation" | "redeemed" | "expired";
 type InvitationRow = {
@@ -253,6 +254,7 @@ export function UserActivationDashboard({
   const [token, setToken] = useState("");
   const [invitationStatus, setInvitationStatus] = useState("");
   const [formError, setFormError] = useState("");
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   const invite = trpc.admin.invite.useMutation({
     onSuccess: async result => {
       setToken(result.token ?? "");
@@ -319,23 +321,26 @@ export function UserActivationDashboard({
     setFormError("");
     invite.mutate({ email: email.trim().toLowerCase(), role });
   };
-  const changeStatus = (
+  const changeStatus = async (
     assignmentId: number,
     displayName: string,
     assignedRole: string,
     next: "active" | "suspended"
   ) => {
     const verb = next === "suspended" ? "suspend" : "reactivate";
-    if (
-      !window.confirm(
-        `Confirm: ${verb} the ${roleLabel(assignedRole)} assignment for ${displayName}? This change is recorded in the audit log.`
-      )
-    )
+    if (!(await confirm({
+      title: `${verb === "suspend" ? "Suspend" : "Reactivate"} account access?`,
+      description: `This will ${verb} the ${roleLabel(assignedRole)} assignment for ${displayName}. The change is recorded in the audit log.`,
+      confirmLabel: verb === "suspend" ? "Suspend access" : "Reactivate access",
+      destructive: verb === "suspend",
+    })))
       return;
     setAssignmentStatus.mutate({ assignmentId, status: next });
   };
 
   return (
+    <>
+    {confirmationDialog}
     <div className="space-y-5">
       <SectionHeading
         eyebrow="INSTITUTION ADMINISTRATION"
@@ -637,6 +642,7 @@ export function UserActivationDashboard({
         </div>
       </section>
     </div>
+    </>
   );
 }
 
@@ -658,6 +664,7 @@ export function PlatformInstitutionDashboard({
   const [token, setToken] = useState("");
   const [invitationStatus, setInvitationStatus] = useState("");
   const [institutionError, setInstitutionError] = useState("");
+  const { confirm, dialog: confirmationDialog } = useConfirmation();
   useEffect(() => {
     const firstInstitution = institutions.data?.find(row => !row.isDemo);
     if (selectedId === undefined && firstInstitution)
@@ -757,21 +764,24 @@ export function PlatformInstitutionDashboard({
       role: "institution_admin",
     });
   };
-  const toggleInstitution = (row: NonNullable<typeof selected>) => {
+  const toggleInstitution = async (row: NonNullable<typeof selected>) => {
     const nextActive = !row.active;
     const explanation = nextActive
       ? "Restore application access"
       : "Block application access for all accounts in";
-    if (
-      !window.confirm(
-        `${explanation} ${row.name}? The change will be recorded in the platform audit log.`
-      )
-    )
+    if (!(await confirm({
+      title: `${nextActive ? "Reactivate" : "Pause"} institution access?`,
+      description: `${explanation} ${row.name}? The change will be recorded in the platform audit log.`,
+      confirmLabel: nextActive ? "Reactivate institution" : "Pause institution",
+      destructive: !nextActive,
+    })))
       return;
     setInstitutionStatus.mutate({ institutionId: row.id, active: nextActive });
   };
 
   return (
+    <>
+    {confirmationDialog}
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
@@ -1180,6 +1190,7 @@ export function PlatformInstitutionDashboard({
         )}
       </section>
     </div>
+    </>
   );
 }
 
