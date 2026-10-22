@@ -35,11 +35,14 @@ export function validatePortfolioSubmission(
       return "A lesson requires a subject, class and valid lesson date.";
     }
     if (
+      !text(payload.school) ||
+      !text(payload.studentName) ||
+      !text(payload.collegeName) ||
       !text(payload.topic) ||
       !text(payload.objectives) ||
       !text(payload.priorKnowledge)
     ) {
-      return "Complete the lesson topic, learning objectives and prior knowledge.";
+      return "Complete the student teacher, college, school, lesson topic, learning objectives and assumed knowledge.";
     }
     const duration = Number(payload.duration);
     const stages = payload.stages;
@@ -59,6 +62,8 @@ export function validatePortfolioSubmission(
       const minutes = Number(stage.duration);
       if (!text(stage.stage) || !Number.isInteger(minutes) || minutes <= 0)
         return "Every lesson stage needs a name and a positive whole-minute duration.";
+      if (!text(stage.teacherActivities) || !text(stage.learnerActivities))
+        return "Every lesson stage needs teacher and pupil activities.";
       stageTotal += minutes;
     }
     if (stageTotal !== duration)

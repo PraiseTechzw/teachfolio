@@ -76,6 +76,9 @@ export function PortfolioStructuredDetails({
   const isScheme = Boolean(
     weeks.length && (display(payload.school) || display(payload.aims) || display(payload.generalObjectives))
   );
+  const isLessonPlan = Boolean(
+    stages.length && (display(payload.school) || display(payload.collegeName) || display(payload.studentName))
+  );
   const schemeMetaKeys = new Set([
     "school", "teacherName", "candidateNumber", "yearGroup", "academicYear", "term",
     "classesSchemedFor", "startDate", "endDate", "teachingWeeks", "periodsPerWeek", "periodDuration",
@@ -90,6 +93,14 @@ export function PortfolioStructuredDetails({
   ]);
   if (weeks.length > 0) hidden.add("weeklyPlan");
   if (isScheme) for (const key of schemeMetaKeys) hidden.add(key);
+  if (isLessonPlan) {
+    for (const key of [
+      "school", "studentName", "collegeName", "classDescription", "classSize", "sex",
+      "week", "dateText", "timeAndDuration", "statedDurationMinutes", "topic", "objectives", "className",
+      "priorKnowledge", "sourceMaterial", "resources", "homework", "generalEvaluation",
+      "strengths", "weaknesses", "suggestions", "duration", "content", "introduction", "safety",
+    ]) hidden.add(key);
+  }
   const fields = Object.entries(payload).filter(
     ([key, value]) =>
       !hidden.has(key) && typeof value !== "object" && display(value).trim()
@@ -161,6 +172,60 @@ export function PortfolioStructuredDetails({
               </table>
             </div>
           </section>
+        </section>
+      )}
+      {isLessonPlan && (
+        <section className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-6">
+          <header className="border-b border-slate-200 pb-4">
+            <p className="text-[11px] font-bold uppercase tracking-[.16em] text-indigo-700">Teaching practice</p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-900">Lesson plan</h2>
+          </header>
+          <div className="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-3">
+            {([
+              ["Student teacher", payload.studentName], ["College", payload.collegeName],
+              ["School", payload.school], ["Class", payload.classDescription ? `${display(payload.className) || ""} (${display(payload.classDescription)})` : payload.className],
+              ["Class size", payload.classSize], ["Sex", payload.sex],
+              ["Week", payload.week ? `Week ${display(payload.week)}` : ""],
+              ["Date", payload.dateText || formatSchemeDate(payload.lessonDate)],
+              ["Time and lesson duration", payload.timeAndDuration],
+            ] as const).filter(([, value]) => display(value).trim()).map(([title, value]) => (
+              <div key={title} className="bg-white px-3.5 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+                <p className="mt-1 text-sm font-medium text-slate-800">{display(value)}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <SchemeSection title="Lesson objectives (SMART)" value={payload.objectives} />
+            <SchemeSection title="Assumed knowledge" value={payload.priorKnowledge} />
+            <SchemeSection title="Source of material" value={payload.sourceMaterial} />
+            <SchemeSection title="Media" value={payload.resources} />
+          </div>
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="px-4 py-3.5"><h3 className="text-sm font-semibold text-slate-900">Lesson presentation structure</h3></div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] border-t border-slate-100 text-left text-sm">
+                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="w-48 px-4 py-3 font-semibold">Stage</th><th className="px-4 py-3 font-semibold">Teacher activities</th><th className="px-4 py-3 font-semibold">Pupil activities</th></tr></thead>
+                <tbody className="divide-y divide-slate-100 align-top">{stages.map((stage, index) => <tr key={String(stage.id ?? index)}>
+                  <td className="px-4 py-4"><p className="font-semibold text-slate-800">{display(stage.stage) || `Stage ${index + 1}`}</p><p className="mt-1 text-xs text-slate-500">{display(stage.duration)} min</p>{display(stage.resources).trim() && <p className="mt-2 text-xs text-slate-600"><strong>Media:</strong> {display(stage.resources)}</p>}</td>
+                  <td className="whitespace-pre-wrap px-4 py-4 text-xs leading-5 text-slate-700">{display(stage.teacherActivities) || "—"}</td>
+                  <td className="whitespace-pre-wrap px-4 py-4 text-xs leading-5 text-slate-700">{display(stage.learnerActivities) || "—"}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </section>
+          <SchemeSection title="Homework" value={payload.homework} />
+          {Boolean(payload.generalEvaluation || payload.strengths || payload.weaknesses || payload.suggestions) && (
+            <section className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Lesson evaluation</h3>
+              <div className="grid gap-3 md:grid-cols-2">
+                <SchemeSection title="General evaluation" value={payload.generalEvaluation} />
+                <SchemeSection title="Strengths" value={payload.strengths} />
+                <SchemeSection title="Weaknesses" value={payload.weaknesses} />
+                <SchemeSection title="Suggestions" value={payload.suggestions} />
+              </div>
+            </section>
+          )}
         </section>
       )}
       {fields.map(([key, value]) => (
@@ -235,7 +300,7 @@ export function PortfolioStructuredDetails({
           </div>
         </section>
       )}
-      {stages.length > 0 && (
+      {stages.length > 0 && !isLessonPlan && (
         <section>
           <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
             Lesson procedure

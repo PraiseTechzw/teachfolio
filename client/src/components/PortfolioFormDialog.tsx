@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { importSchemeDocx, type ImportedSchemeWeek } from "@/lib/scheme-docx-import";
+import { importLessonPlansDocx, type ImportedLessonPlan } from "@/lib/lesson-docx-import";
 import { useConfirmation } from "@/hooks/use-confirmation";
 
 type Kind =
@@ -282,6 +283,10 @@ export default function PortfolioFormDialog({
   const [dirty, setDirty] = useState(false);
   const [schemeImporting, setSchemeImporting] = useState(false);
   const [schemeImportMessage, setSchemeImportMessage] = useState("");
+  const [lessonImporting, setLessonImporting] = useState(false);
+  const [lessonImportMessage, setLessonImportMessage] = useState("");
+  const [importedLessonPlans, setImportedLessonPlans] = useState<ImportedLessonPlan[]>([]);
+  const [selectedLessonPlan, setSelectedLessonPlan] = useState(0);
   const { confirm, dialog: confirmationDialog } = useConfirmation();
   const uploadRequest = useRef<XMLHttpRequest | null>(null);
   const save = trpc.portfolio.saveDraft.useMutation();
@@ -325,6 +330,9 @@ export default function PortfolioFormDialog({
     setSavedId(entry?.id ?? null);
     setDirty(false);
     setSchemeImportMessage("");
+    setLessonImportMessage("");
+    setImportedLessonPlans([]);
+    setSelectedLessonPlan(0);
   }, [open, entry, initialKind]);
 
   const totalDuration = useMemo(
@@ -427,6 +435,35 @@ export default function PortfolioFormDialog({
       setSchemeImporting(false);
     }
   };
+  const applyImportedLessonPlan = (plan: ImportedLessonPlan) => {
+    setTitle(plan.title);
+    setSubject(plan.subject);
+    setClassName(plan.className);
+    setDate(plan.lessonDate);
+    setDuration(plan.duration);
+    setStages(plan.stages.map((stage, index) => ({
+      ...emptyStage(stage.stage || `Stage ${index + 1}`),
+      ...stage,
+    })));
+    setPayload(current => ({ ...current, ...plan.payload }));
+    setDirty(true);
+  };
+  const importLessonFile = async (file: File) => {
+    setLessonImporting(true);
+    setLessonImportMessage("");
+    setError("");
+    try {
+      const plans = await importLessonPlansDocx(file);
+      setImportedLessonPlans(plans);
+      setSelectedLessonPlan(0);
+      applyImportedLessonPlan(plans[0]!);
+      setLessonImportMessage(`Found ${plans.length} lesson plans. Select a plan below, review the imported fields, then save it as a portfolio record.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The DOCX could not be imported.");
+    } finally {
+      setLessonImporting(false);
+    }
+  };
   const allowedLinks =
     kind === "lesson"
       ? ["scheme"]
@@ -468,11 +505,14 @@ export default function PortfolioFormDialog({
       if (!subject.trim() || !className.trim() || !isValidCalendarDate(date))
         return "A lesson needs a subject, class and valid lesson date.";
       if (
+        !getString(payload.school).trim() ||
+        !getString(payload.studentName).trim() ||
+        !getString(payload.collegeName).trim() ||
         !getString(payload.topic).trim() ||
         !getString(payload.objectives).trim() ||
         !getString(payload.priorKnowledge).trim()
       )
-        return "Complete the lesson topic, objectives and prior knowledge.";
+        return "Complete the student teacher, college, school, lesson topic, objectives and assumed knowledge.";
       if (
         !Number.isInteger(duration) ||
         duration <= 0 ||
@@ -481,10 +521,12 @@ export default function PortfolioFormDialog({
           stage =>
             !stage.stage.trim() ||
             !Number.isInteger(Number(stage.duration)) ||
-            Number(stage.duration) <= 0
+            Number(stage.duration) <= 0 ||
+            !stage.teacherActivities.trim() ||
+            !stage.learnerActivities.trim()
         )
       )
-        return "Every lesson stage needs a name and a positive whole-minute duration.";
+        return "Every lesson stage needs a name, positive whole-minute duration, teacher activities and pupil activities.";
       if (totalDuration !== duration)
         return `Lesson stages total ${totalDuration} minutes; match the lesson duration of ${duration} minutes before submitting.`;
     }
@@ -654,7 +696,7 @@ export default function PortfolioFormDialog({
     )
       return;
     const mergedPayload = { ...payload };
-    if (kind === "lesson") Object.assign(mergedPayload, { duration, stages });
+    if (kind === "lesson") Object.assign(mergedPayload, { duration, stages, className });
     if (kind === "scheme") Object.assign(mergedPayload, { weeks });
     if (kind === "evidence")
       Object.assign(mergedPayload, {
@@ -827,7 +869,7 @@ export default function PortfolioFormDialog({
                     }
                   />
                   <FormField
-                    label={kind === "scheme" ? "Classes schemed for" : "Class / grade"}
+                    label={kind === "scheme" ? "Classes schemed for" : kind === "lesson" ? "Class" : "Class / grade"}
                     value={className}
                     onChange={value => {
                       setClassName(value);
@@ -841,7 +883,7 @@ export default function PortfolioFormDialog({
                     }
                   />
                   {kind !== "scheme" && <FormField
-                    label={kind === "evidence" ? "Capture / creation date" : "Lesson date"}
+                    label={kind === "evidence" ? "Capture / creation date" : kind === "lesson" ? "Date / week ending" : "Lesson date"}
                     value={date}
                     onChange={value => {
                       setDate(value);
@@ -856,52 +898,67 @@ export default function PortfolioFormDialog({
 
             {kind === "lesson" && (
               <div className="space-y-5">
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Import a Word lesson plan</p>
+                      <p className="mt-0.5 text-xs leading-5 text-slate-600">Choose a DOCX to fill the matching lesson fields and presentation table. Review the result before saving.</p>
+                    </div>
+                    <label className={`inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 ${lessonImporting ? "pointer-events-none opacity-60" : ""}`}>
+                      <FileUp size={14} /> {lessonImporting ? "Reading document…" : "Choose DOCX"}
+                      <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={lessonImporting} className="sr-only" onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void importLessonFile(file); }} />
+                    </label>
+                  </div>
+                  {lessonImportMessage && <p role="status" className="mt-3 text-xs leading-5 text-emerald-800">{lessonImportMessage}</p>}
+                  {importedLessonPlans.length > 1 && (
+                    <label className="mt-3 block max-w-xl space-y-1.5">
+                      <span className="text-xs font-semibold text-slate-700">Lesson plan from document</span>
+                      <select className={fieldClass} value={selectedLessonPlan} onChange={event => { const index = Number(event.target.value); setSelectedLessonPlan(index); applyImportedLessonPlan(importedLessonPlans[index]!); }}>
+                        {importedLessonPlans.map((plan, index) => (
+                          <option key={`${plan.lessonDate}-${plan.className}-${index}`} value={index}>{`Plan ${index + 1} · Week ${String(plan.payload.week || "—")} · ${plan.className} · ${plan.subject}`}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </div>
                 <div className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
                   {textField(
-                    "Topic or content",
+                    "Lesson topic",
                     "topic",
                     "What will learners study?",
                     0,
                     true
                   )}
                   {textField(
-                    "Prior knowledge",
+                    "Assumed knowledge",
                     "priorKnowledge",
                     "What should learners already know?",
                     2,
                     true
                   )}
                   {textField(
-                    "Learning objectives",
+                    "Lesson objectives (SMART)",
                     "objectives",
                     "By the end, learners will be able to…",
                     3,
                     true
                   )}
                   {textField(
-                    "Teaching resources",
-                    "resources",
-                    "Textbooks, board, manipulatives…",
-                    2
+                    "Student teacher",
+                    "studentName",
+                    "Name as it should appear on the lesson plan",
+                    0,
+                    true
                   )}
-                  {textField(
-                    "Lesson content",
-                    "content",
-                    "Main content and sequence",
-                    3
-                  )}
-                  {textField(
-                    "Introduction / set induction",
-                    "introduction",
-                    "How will you focus learners?",
-                    2
-                  )}
-                  {textField(
-                    "Safety and accessibility",
-                    "safety",
-                    "Considerations for this class",
-                    2
-                  )}
+                  {textField("College name", "collegeName", "Teacher training institution", 0, true)}
+                  {textField("Placement school", "school", "School where the lesson takes place", 0, true)}
+                  {textField("Class size", "classSize", "e.g. 45 girls")}
+                  {textField("Class description", "classDescription", "e.g. mixed ability")}
+                  {textField("Sex", "sex", "e.g. Female")}
+                  {textField("Week number", "week", "e.g. 6")}
+                  {textField("Time and lesson duration", "timeAndDuration", "e.g. 1 hr 10 minutes (one of 6 periods per week)")}
+                  {textField("Source of material", "sourceMaterial", "Syllabus, textbooks, teacher notes", 2)}
+                  {textField("Media", "resources", "Equipment and learning materials", 2)}
                   <label className="block space-y-1.5">
                     <span className="text-sm font-medium text-slate-700">
                       Linked scheme
@@ -931,10 +988,10 @@ export default function PortfolioFormDialog({
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h3 className="font-semibold text-slate-900">
-                        Lesson procedure
+                        Lesson presentation structure
                       </h3>
                       <p className="text-xs text-slate-500">
-                        Reorder stages. Submission is blocked until the stage
+                        Reorder presentation stages. Submission is blocked until the stage
                         total matches the lesson duration.
                       </p>
                     </div>
@@ -953,6 +1010,12 @@ export default function PortfolioFormDialog({
                       Add stage
                     </button>
                   </div>
+                  {Number(payload.statedDurationMinutes) > 0 &&
+                    Number(payload.statedDurationMinutes) !== totalDuration && (
+                      <p role="status" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                        The document states {String(payload.statedDurationMinutes)} minutes, while its presentation stages total {totalDuration} minutes. Review this difference before submitting.
+                      </p>
+                    )}
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-indigo-50 px-3 py-2 text-sm">
                     <label className="flex items-center gap-2 font-medium text-slate-700">
                       Lesson duration{" "}
@@ -1053,20 +1116,11 @@ export default function PortfolioFormDialog({
                         </div>
                         <div className="grid gap-3 sm:grid-cols-2">
                           {(
-                            [
-                              "teacherActivities",
-                              "learnerActivities",
-                              "methods",
-                              "resources",
-                              "assessment",
-                            ] as const
+                            ["teacherActivities", "learnerActivities", "resources"] as const
                           ).map(key => (
                             <label key={key} className="block space-y-1">
                               <span className="text-xs font-medium capitalize text-slate-600">
-                                {key.replace(
-                                  /[A-Z]/g,
-                                  letter => ` ${letter.toLowerCase()}`
-                                )}
+                                {key === "teacherActivities" ? "Teacher activities" : key === "learnerActivities" ? "Pupil activities" : "Media"}
                               </span>
                               <textarea
                                 rows={2}
@@ -1090,15 +1144,18 @@ export default function PortfolioFormDialog({
                   {textField(
                     "Homework / follow-up",
                     "homework",
-                    "Practice or extension activity",
+                    "Homework set for learners",
                     2
                   )}
                   {textField(
-                    "Evaluation and reflection",
-                    "evaluation",
-                    "What evidence showed learning? What would you change?",
+                    "General evaluation",
+                    "generalEvaluation",
+                    "How the lesson went and what learners understood",
                     3
                   )}
+                  {textField("Strengths", "strengths", "What went well?", 2)}
+                  {textField("Weaknesses", "weaknesses", "What needs improvement?", 2)}
+                  {textField("Suggestions", "suggestions", "Changes for the next lesson", 2)}
                 </div>
               </div>
             )}

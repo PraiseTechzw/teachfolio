@@ -64,7 +64,7 @@ function findDocumentXml(bytes: Uint8Array) {
   throw new Error("This DOCX file does not contain a Word document body.");
 }
 
-async function wordXml(file: File) {
+export async function readDocxXml(file: File) {
   if (file.size > MAX_DOCX_BYTES) throw new Error("Choose a DOCX file smaller than 25 MiB.");
   const bytes = new Uint8Array(await file.arrayBuffer());
   const extracted = findDocumentXml(bytes);
@@ -154,7 +154,7 @@ function dateFromWeekEnding(value: string) {
 export async function importSchemeDocx(file: File): Promise<ImportedScheme> {
   if (!file.name.toLowerCase().endsWith(".docx"))
     throw new Error("Choose a Microsoft Word .docx file.");
-  const xml = await wordXml(file);
+  const xml = await readDocxXml(file);
   const document = new DOMParser().parseFromString(xml, "application/xml");
   if (document.querySelector("parsererror")) throw new Error("The Word document content is invalid.");
   const body = document.getElementsByTagNameNS(WORD_NS, "body")[0];
