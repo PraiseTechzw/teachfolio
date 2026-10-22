@@ -48,6 +48,7 @@ import {
   X,
 } from "lucide-react";
 import { useLocation } from "wouter";
+import { Toaster } from "@/components/ui/sonner";
 
 type Kind =
   | "scheme"
@@ -579,6 +580,7 @@ export default function App() {
   const isPlatform = access.roles.includes("platform_admin");
   return (
     <div className="dashboard-shell min-h-screen bg-[#f6f7fb] text-slate-900">
+      <Toaster position="top-right" richColors closeButton />
       {menuOpen && (
         <button
           aria-label="Close navigation"

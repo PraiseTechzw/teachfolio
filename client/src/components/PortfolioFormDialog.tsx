@@ -6,6 +6,7 @@ import {
   ArrowUp,
   Check,
   FileUp,
+  LoaderCircle,
   Plus,
   Save,
   Send,
@@ -15,6 +16,7 @@ import {
 import { importSchemeDocx, type ImportedSchemeWeek } from "@/lib/scheme-docx-import";
 import { importLessonPlansDocx, type ImportedLessonPlan } from "@/lib/lesson-docx-import";
 import { useConfirmation } from "@/hooks/use-confirmation";
+import { toast } from "sonner";
 
 type Kind =
   | "scheme"
@@ -93,6 +95,10 @@ const emptyWeek = (week = 1): WeekRow => ({
   weekEnding: "",
 });
 const getString = (value: unknown) => (typeof value === "string" ? value : "");
+const localToday = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
 const isValidCalendarDate = (value: string) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);
@@ -306,6 +312,10 @@ export default function PortfolioFormDialog({
       retry: false,
     }
   );
+  const placement = trpc.placement.mine.useQuery(undefined, {
+    enabled: open && kind === "evidence" && !entry,
+    retry: false,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -314,7 +324,7 @@ export default function PortfolioFormDialog({
     setTitle(entry?.title ?? "");
     setSubject(entry?.subject ?? "");
     setClassName(entry?.className ?? "");
-    setDate(entry?.lessonDate ?? "");
+    setDate(entry?.lessonDate ?? ((entry?.kind ?? initialKind) === "evidence" ? localToday() : ""));
     setPayload(
       entry?.kind === "scheme" && !nextPayload.yearGroup && nextPayload.academicYear
         ? { ...nextPayload, yearGroup: nextPayload.academicYear }
@@ -334,6 +344,15 @@ export default function PortfolioFormDialog({
     setImportedLessonPlans([]);
     setSelectedLessonPlan(0);
   }, [open, entry, initialKind]);
+
+  useEffect(() => {
+    if (!open || kind !== "evidence" || entry) return;
+    if (!date) setDate(localToday());
+    const schoolName = placement.data?.schoolName;
+    if (schoolName && !getString(payload.school).trim()) {
+      setPayload(current => ({ ...current, school: schoolName }));
+    }
+  }, [open, kind, entry, date, placement.data?.schoolName, payload.school]);
 
   const totalDuration = useMemo(
     () => stages.reduce((sum, stage) => sum + (Number(stage.duration) || 0), 0),
@@ -429,6 +448,7 @@ export default function PortfolioFormDialog({
       if (imported.weeks.length) setWeeks(applyImportedScheme(imported.weeks));
       setDirty(true);
       setSchemeImportMessage(`Imported ${imported.weeks.length} weekly plans. Review the extracted fields and complete any details missing from the source document before submitting.`);
+      toast.success("Scheme document imported", { description: `${imported.weeks.length} weekly plans are ready to review.` });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The DOCX could not be imported.");
     } finally {
@@ -458,6 +478,7 @@ export default function PortfolioFormDialog({
       setSelectedLessonPlan(0);
       applyImportedLessonPlan(plans[0]!);
       setLessonImportMessage(`Found ${plans.length} lesson plans. Select a plan below, review the imported fields, then save it as a portfolio record.`);
+      toast.success("Lesson document imported", { description: `${plans.length} lesson plans are available to review.` });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The DOCX could not be imported.");
     } finally {
@@ -729,6 +750,15 @@ export default function PortfolioFormDialog({
       await utils.portfolio.get.invalidate();
       await utils.review.queue.invalidate();
       setDirty(false);
+      toast.success(
+        uploadAfterSave && kind === "evidence"
+          ? submitAfter
+            ? "Evidence uploaded and submitted for review."
+            : "Evidence uploaded and saved."
+          : submitAfter
+            ? "Portfolio item submitted for review."
+            : "Portfolio draft saved."
+      );
       onSaved(saved.id);
       onClose();
     } catch (reason) {
@@ -803,7 +833,7 @@ export default function PortfolioFormDialog({
               editingLocked ||
               save.isPending ||
               submit.isPending ||
-              schemeImporting ||
+              schemeImporting || lessonImporting || (kind === "evidence" && placement.isLoading) ||
               progress !== null
             }
             className="space-y-5 disabled:opacity-80"
@@ -882,8 +912,8 @@ export default function PortfolioFormDialog({
                       kind === "reflection"
                     }
                   />
-                  {kind !== "scheme" && <FormField
-                    label={kind === "evidence" ? "Capture / creation date" : kind === "lesson" ? "Date / week ending" : "Lesson date"}
+                  {kind !== "scheme" && kind !== "evidence" && <FormField
+                    label={kind === "lesson" ? "Date / week ending" : "Lesson date"}
                     value={date}
                     onChange={value => {
                       setDate(value);
@@ -909,6 +939,7 @@ export default function PortfolioFormDialog({
                       <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={lessonImporting} className="sr-only" onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void importLessonFile(file); }} />
                     </label>
                   </div>
+                  {lessonImporting && <div role="status" aria-live="polite" className="mt-3 flex items-center gap-3 rounded-lg bg-white/80 p-3 text-xs font-medium text-indigo-800"><LoaderCircle size={16} className="animate-spin" />Reading the document and extracting lesson plans…</div>}
                   {lessonImportMessage && <p role="status" className="mt-3 text-xs leading-5 text-emerald-800">{lessonImportMessage}</p>}
                   {importedLessonPlans.length > 1 && (
                     <label className="mt-3 block max-w-xl space-y-1.5">
@@ -1174,6 +1205,7 @@ export default function PortfolioFormDialog({
                     <FileUp size={14} /> {schemeImporting ? "Reading document…" : "Choose DOCX"}
                     <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={schemeImporting} className="sr-only" onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void importSchemeFile(file); }} />
                   </label>
+                  {schemeImporting && <div role="status" aria-live="polite" className="w-full rounded-lg bg-white/80 p-3 text-xs font-medium text-indigo-800"><span className="inline-flex items-center gap-2"><LoaderCircle size={15} className="animate-spin" />Reading the document and extracting the weekly plan…</span><div className="mt-2 h-1 overflow-hidden rounded-full bg-indigo-100"><div className="h-full w-1/3 animate-pulse rounded-full bg-indigo-600" /></div></div>}
                   {schemeImportMessage && <p role="status" className="w-full text-xs leading-5 text-emerald-800">{schemeImportMessage}</p>}
                 </div>
                 <div className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
@@ -1526,11 +1558,27 @@ export default function PortfolioFormDialog({
 
             {kind === "evidence" && (
               <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                {textField(
-                  "Placement school",
-                  "school",
-                  "School or placement context"
-                )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <p className="text-xs font-medium text-slate-500">Capture date</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{date ? new Date(`${date}T00:00:00`).toLocaleDateString() : "Setting date…"}</p>
+                    <p className="mt-1 text-xs text-slate-500">Set automatically when you create this evidence record.</p>
+                  </div>
+                  {!entry && placement.data?.schoolName ? (
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                      <p className="text-xs font-medium text-slate-500">Placement school</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">{placement.data.schoolName}</p>
+                      <p className="mt-1 text-xs text-slate-500">From your assigned teaching-practice placement.</p>
+                    </div>
+                  ) : placement.isLoading && !entry ? (
+                    <div role="status" className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600"><LoaderCircle size={15} className="animate-spin" />Loading your assigned placement…</div>
+                  ) : (
+                    <div>
+                      {textField("Placement school", "school", "School or placement context")}
+                      {!entry && <p className="mt-1 text-xs text-slate-500">No assigned school was available, so enter the school for this evidence item.</p>}
+                    </div>
+                  )}
+                </div>
                 {textField(
                   "Description and context",
                   "description",
@@ -1669,11 +1717,8 @@ export default function PortfolioFormDialog({
                       record page to preview or download them.
                     </div>
                   )}
-                {progress !== null && (
-                  <p role="status" className="text-xs text-slate-600">
-                    Uploading evidence: {progress}%
-                  </p>
-                )}
+                {save.isPending && file && <p role="status" aria-live="polite" className="flex items-center gap-2 text-xs font-medium text-indigo-800"><LoaderCircle size={14} className="animate-spin" />Saving evidence details before upload…</p>}
+                {progress !== null && <div role="status" aria-live="polite" className="rounded-lg border border-indigo-100 bg-white p-3"><div className="mb-2 flex items-center justify-between gap-3 text-xs"><span className="flex min-w-0 items-center gap-2 font-medium text-indigo-900"><LoaderCircle size={14} className="animate-spin" /><span className="truncate">Uploading {file?.name ?? "evidence file"}</span></span><span className="shrink-0 font-semibold tabular-nums">{progress}%</span></div><div className="h-2 overflow-hidden rounded-full bg-indigo-100"><div className="h-full rounded-full bg-indigo-600 transition-[width] duration-200" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-[11px] text-slate-500">Keep this window open until the private upload is confirmed.</p></div>}
                 <p className="text-xs leading-relaxed text-slate-500">
                   Upload success is confirmed only after the private storage
                   transfer and database metadata record both succeed. A backend
@@ -1742,14 +1787,14 @@ export default function PortfolioFormDialog({
               editingLocked ||
               save.isPending ||
               submit.isPending ||
-              schemeImporting ||
+              schemeImporting || lessonImporting || (kind === "evidence" && placement.isLoading) ||
               progress !== null
             }
             onClick={() => void saveEntry(false)}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
-            <Save size={16} />
-            {kind === "evidence" ? "Save metadata only" : "Save draft"}
+            {save.isPending ? <LoaderCircle size={16} className="animate-spin" /> : <Save size={16} />}
+            {save.isPending ? "Saving…" : kind === "evidence" ? "Save metadata only" : "Save draft"}
           </button>
           {kind !== "evidence" && (
             <button
@@ -1758,7 +1803,7 @@ export default function PortfolioFormDialog({
                 editingLocked ||
                 save.isPending ||
                 submit.isPending ||
-                schemeImporting ||
+                schemeImporting || lessonImporting ||
                 progress !== null
               }
               onClick={() => void saveEntry(true)}
@@ -1781,14 +1826,14 @@ export default function PortfolioFormDialog({
                 editingLocked ||
                 save.isPending ||
                 submit.isPending ||
-                schemeImporting ||
+                schemeImporting || lessonImporting || (kind === "evidence" && placement.isLoading) ||
                 progress !== null
               }
               onClick={() => void saveEntry(false, true)}
               className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 px-4 py-2.5 text-sm font-semibold text-indigo-800 hover:bg-indigo-50 disabled:opacity-50"
             >
-              <Check size={15} />
-              Save metadata and upload
+              {save.isPending ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />}
+              {save.isPending ? "Preparing upload…" : "Save metadata and upload"}
             </button>
           )}
           {kind === "evidence" && (
@@ -1798,7 +1843,7 @@ export default function PortfolioFormDialog({
                 editingLocked ||
                 save.isPending ||
                 submit.isPending ||
-                schemeImporting ||
+                schemeImporting || lessonImporting || (kind === "evidence" && placement.isLoading) ||
                 progress !== null
               }
               onClick={() => void saveEntry(true, Boolean(file))}
