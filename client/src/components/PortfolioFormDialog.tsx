@@ -12,6 +12,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { importSchemeDocx, type ImportedSchemeWeek } from "@/lib/scheme-docx-import";
 
 type Kind =
   | "scheme"
@@ -44,6 +45,9 @@ type WeekRow = {
   resources: string;
   assessment: string;
   remarks: string;
+  weeklyAim: string;
+  content: string;
+  weekEnding: string;
 };
 type Entry = {
   id: number;
@@ -82,6 +86,9 @@ const emptyWeek = (week = 1): WeekRow => ({
   resources: "",
   assessment: "",
   remarks: "",
+  weeklyAim: "",
+  content: "",
+  weekEnding: "",
 });
 const getString = (value: unknown) => (typeof value === "string" ? value : "");
 const isValidCalendarDate = (value: string) => {
@@ -161,6 +168,9 @@ function normalizeWeeks(payload: Record<string, unknown>): WeekRow[] {
         resources: getString(week.resources),
         assessment: getString(week.assessment),
         remarks: getString(week.remarks),
+        weeklyAim: getString(week.weeklyAim),
+        content: getString(week.content),
+        weekEnding: getString(week.weekEnding),
       };
     });
   }
@@ -269,6 +279,8 @@ export default function PortfolioFormDialog({
   const [progress, setProgress] = useState<number | null>(null);
   const [savedId, setSavedId] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [schemeImporting, setSchemeImporting] = useState(false);
+  const [schemeImportMessage, setSchemeImportMessage] = useState("");
   const uploadRequest = useRef<XMLHttpRequest | null>(null);
   const save = trpc.portfolio.saveDraft.useMutation();
   const submit = trpc.portfolio.submit.useMutation();
@@ -296,7 +308,11 @@ export default function PortfolioFormDialog({
     setSubject(entry?.subject ?? "");
     setClassName(entry?.className ?? "");
     setDate(entry?.lessonDate ?? "");
-    setPayload(nextPayload);
+    setPayload(
+      entry?.kind === "scheme" && !nextPayload.yearGroup && nextPayload.academicYear
+        ? { ...nextPayload, yearGroup: nextPayload.academicYear }
+        : nextPayload
+    );
     setStages(normalizeStages(nextPayload.stages));
     setWeeks(normalizeWeeks(nextPayload));
     setDuration(Number(nextPayload.duration ?? 40));
@@ -306,6 +322,7 @@ export default function PortfolioFormDialog({
     setProgress(null);
     setSavedId(entry?.id ?? null);
     setDirty(false);
+    setSchemeImportMessage("");
   }, [open, entry, initialKind]);
 
   const totalDuration = useMemo(
@@ -374,6 +391,39 @@ export default function PortfolioFormDialog({
     const nextNumber =
       Math.max(0, ...weeks.map(week => Number(week.week) || 0)) + 1;
     setWeeks(current => [...current, emptyWeek(nextNumber)]);
+  };
+  const applyImportedScheme = (importedWeeks: ImportedSchemeWeek[]) =>
+    importedWeeks.map(week => ({
+      ...emptyWeek(week.week),
+      week: week.week,
+      weekEnding: week.weekEnding,
+      weeklyAim: week.weeklyAim,
+      topic: week.topic,
+      content: week.content,
+      objectives: week.objectives,
+      methods: week.methods,
+      resources: week.resources,
+    }));
+  const importSchemeFile = async (file: File) => {
+    setSchemeImporting(true);
+    setSchemeImportMessage("");
+    setError("");
+    try {
+      const imported = await importSchemeDocx(file);
+      setKind("scheme");
+      setTitle(imported.title);
+      setSubject(imported.subject);
+      setClassName(imported.className);
+      setDate("");
+      setPayload(imported.payload);
+      if (imported.weeks.length) setWeeks(applyImportedScheme(imported.weeks));
+      setDirty(true);
+      setSchemeImportMessage(`Imported ${imported.weeks.length} weekly plans. Review the extracted fields and complete any details missing from the source document before submitting.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The DOCX could not be imported.");
+    } finally {
+      setSchemeImporting(false);
+    }
   };
   const allowedLinks =
     kind === "lesson"
@@ -469,17 +519,15 @@ export default function PortfolioFormDialog({
         submitAfter &&
         (!getString(payload.school).trim() ||
           !getString(payload.teacherName).trim() ||
-          !getString(payload.academicYear).trim() ||
+          !(getString(payload.yearGroup) || getString(payload.academicYear)).trim() ||
           !getString(payload.term).trim() ||
           !getString(payload.aims).trim() ||
-          !getString(payload.startDate) ||
-          !getString(payload.endDate) ||
           !subject.trim() ||
           !className.trim() ||
           !weeks.length ||
           weeks.some(week => !week.topic.trim() || !week.objectives.trim()))
       )
-        return "Complete the scheme's institution, teacher, dates, subject, class, aims and weekly objectives before submitting.";
+        return "Complete the scheme's school, student teacher, year group, period covered, subject, classes, general aims and weekly objectives before submitting.";
     }
     if (
       kind === "reflection" &&
@@ -695,6 +743,7 @@ export default function PortfolioFormDialog({
               editingLocked ||
               save.isPending ||
               submit.isPending ||
+              schemeImporting ||
               progress !== null
             }
             className="space-y-5 disabled:opacity-80"
@@ -760,7 +809,7 @@ export default function PortfolioFormDialog({
                     }
                   />
                   <FormField
-                    label="Class / grade"
+                    label={kind === "scheme" ? "Classes schemed for" : "Class / grade"}
                     value={className}
                     onChange={value => {
                       setClassName(value);
@@ -773,14 +822,8 @@ export default function PortfolioFormDialog({
                       kind === "reflection"
                     }
                   />
-                  <FormField
-                    label={
-                      kind === "scheme"
-                        ? "Planning record date (optional)"
-                        : kind === "evidence"
-                          ? "Capture / creation date"
-                          : "Lesson date"
-                    }
+                  {kind !== "scheme" && <FormField
+                    label={kind === "evidence" ? "Capture / creation date" : "Lesson date"}
                     value={date}
                     onChange={value => {
                       setDate(value);
@@ -788,7 +831,7 @@ export default function PortfolioFormDialog({
                     }}
                     type="date"
                     required={kind === "lesson" || kind === "reflection"}
-                  />
+                  />}
                 </>
               )}
             </div>
@@ -1044,6 +1087,20 @@ export default function PortfolioFormDialog({
 
             {kind === "scheme" && (
               <div className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-indigo-700"><FileUp size={17} /></span>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Import a Word scheme</p>
+                      <p className="mt-0.5 text-xs leading-5 text-slate-600">Choose a DOCX to fill the scheme fields and weekly plan. Review everything before saving.</p>
+                    </div>
+                  </div>
+                  <label className={`inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 ${schemeImporting ? "pointer-events-none opacity-60" : ""}`}>
+                    <FileUp size={14} /> {schemeImporting ? "Reading document…" : "Choose DOCX"}
+                    <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={schemeImporting} className="sr-only" onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void importSchemeFile(file); }} />
+                  </label>
+                  {schemeImportMessage && <p role="status" className="w-full text-xs leading-5 text-emerald-800">{schemeImportMessage}</p>}
+                </div>
                 <div className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
                   {textField(
                     "Placement school",
@@ -1060,53 +1117,29 @@ export default function PortfolioFormDialog({
                     true
                   )}
                   {textField(
-                    "Academic year",
-                    "academicYear",
-                    "e.g. 2026",
+                    "Candidate number",
+                    "candidateNumber",
+                    "Teacher candidate number"
+                  )}
+                  {textField(
+                    "Year group",
+                    "yearGroup",
+                    "e.g. Form 2",
                     0,
                     true
                   )}
                   {textField(
-                    "Term / teaching-practice period",
+                    "Period covered by scheme",
                     "term",
-                    "e.g. Term 3",
+                    "e.g. Weeks 5 to 13",
                     0,
                     true
                   )}
                   <FormField
-                    label="Scheme start date"
-                    value={payload.startDate}
-                    onChange={value => setValue("startDate", value)}
-                    type="date"
-                    required
-                  />
-                  <FormField
-                    label="Scheme end date"
-                    value={payload.endDate}
-                    onChange={value => setValue("endDate", value)}
-                    type="date"
-                    required
-                  />
-                  <FormField
-                    label="Teaching weeks"
-                    value={payload.teachingWeeks}
-                    onChange={value => setValue("teachingWeeks", value)}
-                    type="number"
-                    placeholder="e.g. 12"
-                  />
-                  <FormField
-                    label="Periods per week"
+                    label="Number of periods per week"
                     value={payload.periodsPerWeek}
                     onChange={value => setValue("periodsPerWeek", value)}
-                    type="number"
-                    placeholder="e.g. 4"
-                  />
-                  <FormField
-                    label="Period duration (minutes)"
-                    value={payload.periodDuration}
-                    onChange={value => setValue("periodDuration", value)}
-                    type="number"
-                    placeholder="e.g. 35"
+                    placeholder="As shown on the scheme"
                   />
                   {textField(
                     "General aims and objectives",
@@ -1116,16 +1149,22 @@ export default function PortfolioFormDialog({
                     true
                   )}
                   {textField(
-                    "Prior knowledge",
-                    "priorKnowledge",
-                    "Prerequisite learning",
-                    2
+                    "General objectives",
+                    "generalObjectives",
+                    "Expected learning outcomes",
+                    4
                   )}
                   {textField(
-                    "Curriculum reference",
-                    "curriculumReference",
-                    "Source syllabus",
-                    2
+                    "Class information",
+                    "classInformation",
+                    "One class per line: class | learner count | ability",
+                    3
+                  )}
+                  {textField(
+                    "Topics covered",
+                    "topics",
+                    "One topic per line",
+                    4
                   )}
                   {textField(
                     "Teaching methods",
@@ -1137,12 +1176,6 @@ export default function PortfolioFormDialog({
                     "Teaching and learning resources",
                     "resources",
                     "Books, materials, equipment",
-                    2
-                  )}
-                  {textField(
-                    "Assessment approaches",
-                    "assessment",
-                    "How learning will be checked",
                     2
                   )}
                 </div>
@@ -1228,20 +1261,20 @@ export default function PortfolioFormDialog({
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <FormField
-                          label="Week start"
-                          value={week.startDate}
+                          label="Week ending (from source)"
+                          value={week.weekEnding}
                           onChange={value =>
-                            updateWeek(index, { startDate: value })
+                            updateWeek(index, { weekEnding: value })
                           }
-                          type="date"
+                          placeholder="e.g. 09/10/2026"
                         />
                         <FormField
-                          label="Week end"
-                          value={week.endDate}
+                          label="Weekly aim"
+                          value={week.weeklyAim}
                           onChange={value =>
-                            updateWeek(index, { endDate: value })
+                            updateWeek(index, { weeklyAim: value })
                           }
-                          type="date"
+                          placeholder="Purpose for this week"
                         />
                         <label className="block space-y-1.5 sm:col-span-2">
                           <span className="text-sm font-medium text-slate-700">
@@ -1276,16 +1309,18 @@ export default function PortfolioFormDialog({
                             placeholder="What should learners be able to do?"
                           />
                         </label>
-                        {(
-                          [
-                            "teacherActivities",
-                            "learnerActivities",
-                            "methods",
-                            "resources",
-                            "assessment",
-                            "remarks",
-                          ] as const
-                        ).map(key => (
+                        <label className="block space-y-1.5 sm:col-span-2">
+                          <span className="text-sm font-medium text-slate-700">Content</span>
+                          <textarea
+                            rows={3}
+                            maxLength={5000}
+                            className={fieldClass}
+                            value={week.content}
+                            onChange={event => updateWeek(index, { content: event.target.value })}
+                            placeholder="Key knowledge, concepts, or activities for the week"
+                          />
+                        </label>
+                        {(["methods", "resources"] as const).map(key => (
                           <label key={key} className="block space-y-1">
                             <span className="text-xs font-medium capitalize text-slate-600">
                               {key.replace(
@@ -1632,6 +1667,7 @@ export default function PortfolioFormDialog({
               editingLocked ||
               save.isPending ||
               submit.isPending ||
+              schemeImporting ||
               progress !== null
             }
             onClick={() => void saveEntry(false)}
@@ -1647,6 +1683,7 @@ export default function PortfolioFormDialog({
                 editingLocked ||
                 save.isPending ||
                 submit.isPending ||
+                schemeImporting ||
                 progress !== null
               }
               onClick={() => void saveEntry(true)}
@@ -1669,6 +1706,7 @@ export default function PortfolioFormDialog({
                 editingLocked ||
                 save.isPending ||
                 submit.isPending ||
+                schemeImporting ||
                 progress !== null
               }
               onClick={() => void saveEntry(false, true)}
@@ -1685,6 +1723,7 @@ export default function PortfolioFormDialog({
                 editingLocked ||
                 save.isPending ||
                 submit.isPending ||
+                schemeImporting ||
                 progress !== null
               }
               onClick={() => void saveEntry(true, Boolean(file))}

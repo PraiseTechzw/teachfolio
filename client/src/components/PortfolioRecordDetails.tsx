@@ -38,6 +38,26 @@ const outcomeTone: Record<string, string> = {
   rejected: "bg-rose-50 text-rose-800",
 };
 
+function formatSchemeDate(value: unknown) {
+  const raw = display(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const date = new Date(`${raw}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime())
+    ? raw
+    : date.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+}
+
+function SchemeSection({ title, value }: { title: string; value: unknown }) {
+  const content = display(value).trim();
+  if (!content) return null;
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">{title}</h3>
+      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">{content}</p>
+    </section>
+  );
+}
+
 export function PortfolioStructuredDetails({
   payload,
   linkedEntry,
@@ -53,6 +73,15 @@ export function PortfolioStructuredDetails({
   const weeks = Array.isArray(payload.weeks)
     ? (payload.weeks as Array<Record<string, unknown>>)
     : [];
+  const isScheme = Boolean(
+    weeks.length && (display(payload.school) || display(payload.aims) || display(payload.generalObjectives))
+  );
+  const schemeMetaKeys = new Set([
+    "school", "teacherName", "candidateNumber", "yearGroup", "academicYear", "term",
+    "classesSchemedFor", "startDate", "endDate", "teachingWeeks", "periodsPerWeek", "periodDuration",
+    "classInformation", "aims", "generalObjectives", "topics", "methods", "resources",
+    "priorKnowledge", "curriculumReference", "assessment", "assessmentApproaches",
+  ]);
   const hidden = new Set([
     "stages",
     "weeks",
@@ -60,6 +89,7 @@ export function PortfolioStructuredDetails({
     "linkedEntryId",
   ]);
   if (weeks.length > 0) hidden.add("weeklyPlan");
+  if (isScheme) for (const key of schemeMetaKeys) hidden.add(key);
   const fields = Object.entries(payload).filter(
     ([key, value]) =>
       !hidden.has(key) && typeof value !== "object" && display(value).trim()
@@ -81,6 +111,58 @@ export function PortfolioStructuredDetails({
           </button>
         </div>
       )}
+      {isScheme && (
+        <section className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-6">
+          <header className="border-b border-slate-200 pb-4">
+            <p className="text-[11px] font-bold uppercase tracking-[.16em] text-indigo-700">Teaching practice</p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-900">Scheme of Work</h2>
+          </header>
+          <div className="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-3">
+            {([
+              ["School", payload.school], ["Student teacher", payload.teacherName],
+              ["Candidate number", payload.candidateNumber], ["Year group", payload.yearGroup || payload.academicYear],
+              ["Period covered by scheme", payload.term], ["Number of periods per week", payload.periodsPerWeek],
+            ] as const).filter(([, value]) => display(value).trim()).map(([title, value]) => (
+              <div key={title} className="bg-white px-3.5 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+                <p className="mt-1 text-sm font-medium text-slate-800">{display(value)}</p>
+              </div>
+            ))}
+          </div>
+          {display(payload.classInformation).trim() && (
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <h3 className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">Class information</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[420px] border-t border-slate-100 text-left text-sm">
+                  <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-2.5 font-semibold">Class</th><th className="px-4 py-2.5 font-semibold">Girls</th><th className="px-4 py-2.5 font-semibold">Ability</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">{display(payload.classInformation).split(/\n+/).filter(Boolean).map((line, index) => { const cells = line.split(/\s*\|\s*/); return <tr key={`${line}-${index}`}><td className="px-4 py-2.5 font-medium text-slate-800">{cells[0] ?? "—"}</td><td className="px-4 py-2.5 text-slate-600">{cells[1] ?? "—"}</td><td className="px-4 py-2.5 text-slate-600">{cells[2] ?? "—"}</td></tr>; })}</tbody>
+                </table>
+              </div>
+            </section>
+          )}
+          <div className="grid gap-3 md:grid-cols-2">
+            <SchemeSection title="General scheme aims" value={payload.aims} />
+            <SchemeSection title="General objectives" value={payload.generalObjectives} />
+            <SchemeSection title="Topics" value={payload.topics} />
+            <SchemeSection title="Teaching methods / strategies" value={payload.methods} />
+            <div className="md:col-span-2"><SchemeSection title="Sources / instructional materials" value={payload.resources} /></div>
+          </div>
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="flex items-center justify-between gap-3 px-4 py-3.5"><div><h3 className="text-sm font-semibold text-slate-900">Weekly plan</h3><p className="mt-0.5 text-xs text-slate-500">{weeks.length} teaching week{weeks.length === 1 ? "" : "s"}</p></div></div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[920px] border-t border-slate-100 text-left text-sm">
+                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="w-32 px-4 py-3 font-semibold">Week ending</th><th className="px-4 py-3 font-semibold">Topic and content</th><th className="w-[25%] px-4 py-3 font-semibold">Methods and teaching strategies</th><th className="w-[23%] px-4 py-3 font-semibold">Sources / instructional materials</th></tr></thead>
+                <tbody className="divide-y divide-slate-100 align-top">{weeks.map((week, index) => <tr key={String(week.id ?? index)}>
+                  <td className="px-4 py-4"><p className="font-semibold text-slate-800">Week {display(week.week) || index + 1}</p><p className="mt-1 text-xs text-slate-500">{formatSchemeDate(week.weekEnding) || "—"}</p></td>
+                  <td className="px-4 py-4"><div className="space-y-2">{display(week.weeklyAim).trim() && <p className="text-xs leading-5 text-slate-600"><strong className="text-slate-700">Weekly aim: </strong>{display(week.weeklyAim)}</p>}<p className="font-semibold text-slate-800">{display(week.topic) || "—"}</p>{display(week.objectives).trim() && <p className="whitespace-pre-wrap text-xs leading-5 text-slate-700"><strong>Objectives</strong><br />{display(week.objectives)}</p>}{display(week.content).trim() && <p className="whitespace-pre-wrap text-xs leading-5 text-slate-600"><strong className="text-slate-700">Content</strong><br />{display(week.content)}</p>}</div></td>
+                  <td className="whitespace-pre-wrap px-4 py-4 text-xs leading-5 text-slate-700">{display(week.methods) || "—"}</td>
+                  <td className="whitespace-pre-wrap px-4 py-4 text-xs leading-5 text-slate-700">{display(week.resources) || "—"}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      )}
       {fields.map(([key, value]) => (
         <div key={key}>
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -91,7 +173,7 @@ export function PortfolioStructuredDetails({
           </p>
         </div>
       ))}
-      {weeks.length > 0 && (
+      {weeks.length > 0 && !isScheme && (
         <section className="space-y-3">
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">

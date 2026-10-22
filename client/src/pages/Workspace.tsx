@@ -595,7 +595,7 @@ export default function Workspace({
                   )}
                 </span>
               </div>
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className={`mt-5 grid gap-3 ${visibleEntry.kind === "scheme" ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
                 <div className="rounded-xl bg-slate-50 p-3">
                   <p className="text-xs text-slate-500">Subject</p>
                   <p className="mt-1 text-sm font-semibold">
@@ -603,17 +603,21 @@ export default function Workspace({
                   </p>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">Class</p>
+                  <p className="text-xs text-slate-500">
+                    {visibleEntry.kind === "scheme" ? "Classes schemed for" : "Class"}
+                  </p>
                   <p className="mt-1 text-sm font-semibold">
                     {visibleEntry.className || "—"}
                   </p>
                 </div>
-                <div className="rounded-xl bg-slate-50 p-3">
-                  <p className="text-xs text-slate-500">Date</p>
-                  <p className="mt-1 text-sm font-semibold">
-                    {visibleEntry.lessonDate || "—"}
-                  </p>
-                </div>
+                {visibleEntry.kind !== "scheme" && (
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Date</p>
+                    <p className="mt-1 text-sm font-semibold">
+                      {visibleEntry.lessonDate || "—"}
+                    </p>
+                  </div>
+                )}
               </div>
               <PortfolioStructuredDetails
                 payload={visibleEntry.payload ?? {}}

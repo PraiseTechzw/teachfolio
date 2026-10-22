@@ -71,14 +71,14 @@ export function validatePortfolioSubmission(
     if (
       !text(payload.school) ||
       !text(payload.teacherName) ||
-      !text(payload.academicYear) ||
-      !text(payload.term) ||
-      !validDate(start) ||
-      !validDate(end)
+      !(text(payload.yearGroup) || text(payload.academicYear)) ||
+      !text(payload.term)
     ) {
-      return "A scheme requires its school, teacher, academic year, term and valid start/end dates.";
+      return "A scheme requires its school, student teacher, year group and period covered.";
     }
-    if (String(start) > String(end))
+    if ((start || end) && (!validDate(start) || !validDate(end)))
+      return "Check the legacy scheme date range.";
+    if (start && end && String(start) > String(end))
       return "The scheme end date must be on or after its start date.";
     if (!text(entry.subject) || !text(entry.className) || !text(payload.aims))
       return "A scheme requires a subject, class and general aims.";
@@ -108,11 +108,8 @@ export function validatePortfolioSubmission(
       ) {
         return `Check the date range for week ${number}.`;
       }
-      if (
-        weekStart &&
-        weekEnd &&
-        (String(weekStart) < String(start) || String(weekEnd) > String(end))
-      ) {
+      if (start && end && weekStart && weekEnd &&
+        (String(weekStart) < String(start) || String(weekEnd) > String(end))) {
         return `The date range for week ${number} must fall within the overall scheme dates.`;
       }
     }

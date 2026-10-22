@@ -1341,7 +1341,7 @@ export function PlacementManagementDashboard({
   };
 
   const inputClass =
-    "mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-800";
+    "mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-normal text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:cursor-not-allowed disabled:bg-slate-50";
   const labelClass = "block text-xs font-semibold text-slate-600";
 
   return (
@@ -1453,7 +1453,7 @@ export function PlacementManagementDashboard({
                       {row.studentNumber}
                     </p>
                     <p className="mt-1 truncate text-xs font-medium text-slate-700">
-                      {row.programme} · {row.cohort} · {row.subject}
+                      {[row.programme, row.cohort, row.subject].filter(Boolean).join(" · ")}
                     </p>
                   </div>
                 </div>
@@ -1513,24 +1513,17 @@ export function PlacementManagementDashboard({
       {showEditor && <form
         id="placement-editor"
         onSubmit={submit}
-        className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-6"
+        className="scroll-mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
       >
-        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="mt-1 font-semibold text-slate-900">
-              {editingId ? "Edit placement" : "Create placement"}
-            </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4 sm:px-6">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><MapPin size={18} /></span>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">{editingId ? "Edit placement" : "New placement"}</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Student, school, practice dates, and review team</p>
+            </div>
           </div>
-          <ActionButton
-            onClick={() => {
-              setEditingId(undefined);
-              setForm(emptyPlacementForm);
-              setMessage("");
-              setShowEditor(false);
-            }}
-          >
-            <X size={14} /> Cancel
-          </ActionButton>
+          <button type="button" aria-label="Close placement form" onClick={() => { setEditingId(undefined); setForm(emptyPlacementForm); setMessage(""); setShowEditor(false); }} className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-700"><X size={17} /></button>
         </div>
         {options.error ? (
           <div
@@ -1559,175 +1552,39 @@ export function PlacementManagementDashboard({
             !students.length ||
             (!supervisors.length && !lecturers.length)
           }
-          className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+          className="space-y-6 p-5 sm:p-6"
         >
-          <label className={labelClass}>
-            Student teacher
-            <select
-              required
-              value={form.studentUserId}
-              onChange={event => setField("studentUserId", event.target.value)}
-              className={inputClass}
-            >
-              <option value="">Select a student</option>
-              {students.map(person => (
-                <option key={person.userId} value={person.userId}>
-                  {person.name || person.email || `Student #${person.userId}`}
-                  {person.email && person.name ? ` · ${person.email}` : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={labelClass}>
-            School name
-            <input
-              required
-              minLength={2}
-              maxLength={220}
-              value={form.schoolName}
-              onChange={event => setField("schoolName", event.target.value)}
-              className={inputClass}
-            />
-          </label>
-          <label className={labelClass}>
-            School location
-            <input
-              required
-              minLength={2}
-              maxLength={220}
-              value={form.schoolLocation}
-              onChange={event => setField("schoolLocation", event.target.value)}
-              className={inputClass}
-            />
-          </label>
-          <label className={labelClass}>
-            Programme
-            <input
-              required
-              minLength={2}
-              maxLength={180}
-              value={form.programme}
-              onChange={event => setField("programme", event.target.value)}
-              className={inputClass}
-            />
-          </label>
-          <label className={labelClass}>
-            Cohort
-            <input
-              required
-              maxLength={100}
-              value={form.cohort}
-              onChange={event => setField("cohort", event.target.value)}
-              className={inputClass}
-            />
-          </label>
-          <label className={labelClass}>
-            Student number
-            <input
-              required
-              maxLength={80}
-              value={form.studentNumber}
-              onChange={event => setField("studentNumber", event.target.value)}
-              className={inputClass}
-            />
-          </label>
-          <label className={labelClass}>
-            Teaching subject
-            <input
-              required
-              minLength={2}
-              maxLength={140}
-              value={form.subject}
-              onChange={event => setField("subject", event.target.value)}
-              className={inputClass}
-            />
-          </label>
-          <label className={labelClass}>
-            Classes
-            <input
-              required
-              value={form.classes}
-              onChange={event => setField("classes", event.target.value)}
-              placeholder="e.g. Form 2A, Form 2B"
-              className={inputClass}
-            />
-            <span className="mt-1 block font-normal text-slate-500">
-              Separate class names with commas.
-            </span>
-          </label>
-          <label className={labelClass}>
-            Placement status
-            <select
-              value={form.status}
-              onChange={event =>
-                setField(
-                  "status",
-                  event.target.value as PlacementFormState["status"]
-                )
-              }
-              className={inputClass}
-            >
-              <option value="upcoming">Upcoming</option>
-              <option value="active">Active</option>
-              <option value="completed">Completed</option>
-            </select>
-          </label>
-          <label className={labelClass}>
-            Start date
-            <input
-              required
-              type="date"
-              value={form.startDate}
-              onChange={event => setField("startDate", event.target.value)}
-              className={inputClass}
-            />
-          </label>
-          <label className={labelClass}>
-            End date
-            <input
-              required
-              type="date"
-              value={form.endDate}
-              onChange={event => setField("endDate", event.target.value)}
-              className={inputClass}
-            />
-          </label>
-          <label className={labelClass}>
-            Supervisor
-            <select
-              value={form.supervisorUserId}
-              onChange={event =>
-                setField("supervisorUserId", event.target.value)
-              }
-              className={inputClass}
-            >
-              <option value="">Not assigned</option>
-              {supervisors.map(person => (
-                <option key={person.userId} value={person.userId}>
-                  {person.name ||
-                    person.email ||
-                    `Supervisor #${person.userId}`}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={labelClass}>
-            Lecturer
-            <select
-              value={form.lecturerUserId}
-              onChange={event => setField("lecturerUserId", event.target.value)}
-              className={inputClass}
-            >
-              <option value="">Not assigned</option>
-              {lecturers.map(person => (
-                <option key={person.userId} value={person.userId}>
-                  {person.name || person.email || `Lecturer #${person.userId}`}
-                </option>
-              ))}
-            </select>
-          </label>
+          <section>
+            <div className="mb-3 flex items-center gap-2"><Users size={16} className="text-indigo-600" /><h3 className="text-xs font-semibold uppercase tracking-wide text-slate-700">Student and school</h3></div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <label className={`${labelClass} xl:col-span-1`}>Student teacher<select required value={form.studentUserId} onChange={event => setField("studentUserId", event.target.value)} className={inputClass}><option value="">Select a student</option>{students.map(person => <option key={person.userId} value={person.userId}>{person.name || person.email || `Student #${person.userId}`}{person.email && person.name ? ` · ${person.email}` : ""}</option>)}</select></label>
+              <label className={labelClass}>Student number<input required maxLength={80} value={form.studentNumber} onChange={event => setField("studentNumber", event.target.value)} className={inputClass} /></label>
+              <label className={labelClass}>Programme<input required minLength={2} maxLength={180} value={form.programme} onChange={event => setField("programme", event.target.value)} className={inputClass} /></label>
+              <label className={labelClass}>School name<input required minLength={2} maxLength={220} value={form.schoolName} onChange={event => setField("schoolName", event.target.value)} className={inputClass} /></label>
+              <label className={labelClass}>School location<input required minLength={2} maxLength={220} value={form.schoolLocation} onChange={event => setField("schoolLocation", event.target.value)} className={inputClass} /></label>
+              <label className={labelClass}>Teaching subject<input required minLength={2} maxLength={140} value={form.subject} onChange={event => setField("subject", event.target.value)} className={inputClass} /></label>
+              <label className={labelClass}>Classes<input required value={form.classes} onChange={event => setField("classes", event.target.value)} placeholder="e.g. Form 2A, Form 2B" className={inputClass} /><span className="mt-1.5 block font-normal text-slate-400">Separate class names with commas.</span></label>
+            </div>
+          </section>
+
+          <section className="border-t border-slate-100 pt-5">
+            <div className="mb-3 flex items-center gap-2"><CalendarDays size={16} className="text-indigo-600" /><h3 className="text-xs font-semibold uppercase tracking-wide text-slate-700">Practice period and review team</h3></div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <label className={labelClass}>Placement status<select value={form.status} onChange={event => setField("status", event.target.value as PlacementFormState["status"])} className={inputClass}><option value="upcoming">Upcoming</option><option value="active">Active</option><option value="completed">Completed</option></select></label>
+              <label className={labelClass}>Start date<input required type="date" value={form.startDate} onChange={event => setField("startDate", event.target.value)} className={inputClass} /></label>
+              <label className={labelClass}>End date<input required type="date" value={form.endDate} onChange={event => setField("endDate", event.target.value)} className={inputClass} /></label>
+              <span className="hidden xl:block" aria-hidden="true" />
+              <label className={labelClass}>Supervisor<select value={form.supervisorUserId} onChange={event => setField("supervisorUserId", event.target.value)} className={inputClass}><option value="">Not assigned</option>{supervisors.map(person => <option key={person.userId} value={person.userId}>{person.name || person.email || `Supervisor #${person.userId}`}</option>)}</select></label>
+              <label className={labelClass}>Lecturer<select value={form.lecturerUserId} onChange={event => setField("lecturerUserId", event.target.value)} className={inputClass}><option value="">Not assigned</option>{lecturers.map(person => <option key={person.userId} value={person.userId}>{person.name || person.email || `Lecturer #${person.userId}`}</option>)}</select></label>
+            </div>
+          </section>
         </fieldset>
-        <div className="mt-5 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-4 sm:px-6">
+          <div className="min-w-0 flex-1">
+            {message && <p role="status" className="text-sm text-emerald-700">{message}</p>}
+            {save.error && <p role="alert" className="text-sm text-rose-700">{save.error.message}</p>}
+          </div>
+          <button type="button" onClick={() => { setEditingId(undefined); setForm(emptyPlacementForm); setMessage(""); setShowEditor(false); }} className="min-h-10 rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-white">Cancel</button>
           <button
             type="submit"
             disabled={
@@ -1736,7 +1593,7 @@ export function PlacementManagementDashboard({
               !students.length ||
               (!supervisors.length && !lecturers.length)
             }
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Save size={15} />
             {save.isPending
@@ -1745,16 +1602,6 @@ export function PlacementManagementDashboard({
                 ? "Save placement"
                 : "Create placement"}
           </button>
-          {message && (
-            <p role="status" className="text-sm text-emerald-700">
-              {message}
-            </p>
-          )}
-          {save.error && (
-            <p role="alert" className="text-sm text-rose-700">
-              {save.error.message}
-            </p>
-          )}
         </div>
       </form>}
     </div>

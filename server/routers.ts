@@ -95,7 +95,7 @@ const placementInput = z
     schoolName: z.string().trim().min(2).max(220),
     schoolLocation: z.string().trim().min(2).max(220),
     programme: z.string().trim().min(2).max(180),
-    cohort: z.string().trim().min(1).max(100),
+    cohort: z.string().trim().max(100).default(""),
     studentNumber: z.string().trim().min(1).max(80),
     subject: z.string().trim().min(2).max(140),
     classes: z.array(z.string().trim().min(1).max(100)).min(1).max(30),

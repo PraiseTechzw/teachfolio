@@ -200,11 +200,14 @@ export default function StudentPortfolioModule({
       role="status"
       className="mb-5 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950"
     >
-      <strong className="block font-bold">PRACTICE WORKSPACE</strong>
+      <strong className="block font-semibold">Practice institution access</strong>
       <span className="mt-1 block">
-        This workspace contains fictional practice records, not institutional
-        assessment results. Authorized changes are saved through the configured
-        backend.
+        This account is assigned to Teachfolio’s reserved practice institution.
+        Portfolio changes are saved to the configured backend, but records in
+        this institution are fictional and are kept separate from real
+        institution data. To work with your placement institution, ask its
+        administrator to arrange your access. The practice assignment must be
+        removed before this account can be assigned to another institution.
       </span>
     </div>
   ) : null;
