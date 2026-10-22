@@ -254,13 +254,15 @@ function PageTitle({
   return (
     <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
       <div>
-        <p className="text-[11px] font-bold tracking-[.17em] text-indigo-600">
+        <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-indigo-600">
           {eyebrow}
         </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-[28px]">
+        <h1 className="mt-1.5 text-2xl font-semibold tracking-tight text-slate-900 sm:text-[28px]">
           {title}
         </h1>
-        <p className="mt-1.5 max-w-2xl text-sm text-slate-500">{description}</p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+          {description}
+        </p>
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>
@@ -1357,25 +1359,41 @@ export default function Workspace({
                 "text-rose-700",
                 "bg-rose-50",
               ],
-            ].map(([label, value, detail, color, background]) => (
-              <div
-                key={String(label)}
-                className="rounded-2xl border border-slate-200 bg-white p-4"
-              >
-                <p className="text-xs font-semibold text-slate-500">{label}</p>
-                <div className="mt-2 flex items-end justify-between">
-                  <span
-                    className={`text-3xl font-semibold tracking-tight ${color}`}
-                  >
-                    {value}
-                  </span>
-                  <span className={`rounded-lg p-2 ${background}`}>
-                    <FileText size={17} className={color as string} />
-                  </span>
+            ].map(([label, value, detail, color, background]) => {
+              const StatIcon =
+                label === "Required portfolio"
+                  ? ShieldCheck
+                  : label === "Drafts"
+                    ? FileText
+                    : label === "Awaiting review"
+                      ? Clock3
+                      : MessageSquareText;
+              return (
+                <div
+                  key={String(label)}
+                  className="rounded-2xl border border-slate-200 bg-white p-5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium text-slate-500">
+                        {label}
+                      </p>
+                      <p
+                        className={`mt-3 text-[30px] font-semibold leading-none tracking-tight ${color}`}
+                      >
+                        {value}
+                      </p>
+                    </div>
+                    <span className={`rounded-xl p-2.5 ${background}`}>
+                      <StatIcon size={19} className={color as string} />
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
+                    {detail}
+                  </p>
                 </div>
-                <p className="mt-2 text-xs text-slate-500">{detail}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(280px,.8fr)]">
             <section className="rounded-2xl border border-slate-200 bg-white">

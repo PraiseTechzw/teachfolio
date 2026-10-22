@@ -50,13 +50,13 @@ function SectionHeading({
 }) {
   return (
     <div className="mb-5">
-      <p className="text-[11px] font-bold tracking-[.17em] text-indigo-600">
+      <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-indigo-600">
         {eyebrow}
       </p>
-      <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-[28px]">
+      <h1 className="mt-1.5 text-2xl font-semibold tracking-tight text-slate-900 sm:text-[28px]">
         {title}
       </h1>
-      <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-slate-500">
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
         {description}
       </p>
     </div>

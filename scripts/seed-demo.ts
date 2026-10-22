@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { and, eq } from "drizzle-orm";
 import { accessAssignments, auditLogs, institutions, notifications, placements, portfolioEntries, portfolioRequirements, reviews, submissionVersions, users } from "../drizzle/schema";
 import { getDb } from "../server/db";

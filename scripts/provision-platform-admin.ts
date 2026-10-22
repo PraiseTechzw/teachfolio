@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { and, eq, isNull } from "drizzle-orm";
 import { accessAssignments, users } from "../drizzle/schema";
 import { getDb } from "../server/db";

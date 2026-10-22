@@ -4,7 +4,14 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   color: #172033;
   background: #f7f8fb;
   font-synthesis: none;
@@ -29,22 +36,206 @@
   --color-border: var(--border);
 }
 
-* { box-sizing: border-box; }
-html { min-width: 320px; background: var(--background); }
-body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--background); color: var(--foreground); }
-button, input, textarea, select { font: inherit; }
-button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid #818cf8; outline-offset: 2px; }
-::selection { background: #e0e7ff; color: #1e1b4b; }
+* {
+  box-sizing: border-box;
+}
+html {
+  min-width: 320px;
+  background: var(--background);
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid #818cf8;
+  outline-offset: 2px;
+}
+::selection {
+  background: #e0e7ff;
+  color: #1e1b4b;
+}
+
+/* Shared dashboard shell: quiet surfaces, crisp separation, and short motion. */
+.dashboard-shell {
+  background-image: radial-gradient(
+    ellipse at 78% 0%,
+    rgb(99 102 241 / 3.5%),
+    transparent 34rem
+  );
+}
+.dashboard-sidebar {
+  box-shadow: 8px 0 30px rgb(15 23 42 / 2%);
+}
+.dashboard-header {
+  box-shadow: 0 4px 18px rgb(15 23 42 / 2%);
+}
+.dashboard-content
+  [class*="rounded-2xl"][class*="border-slate-200"][class*="bg-white"] {
+  border-color: #e4e7ec;
+  border-radius: 14px;
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 2%),
+    0 3px 10px rgb(15 23 42 / 2%);
+}
+.dashboard-content h1 {
+  color: #101828;
+  font-size: clamp(1.5rem, 2vw, 1.75rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+.dashboard-content h2 {
+  letter-spacing: -0.015em;
+}
+.dashboard-content input:not([type="checkbox"]),
+.dashboard-content select,
+.dashboard-content textarea {
+  border-color: #d0d5dd;
+  border-radius: 8px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+.dashboard-content input:not([type="checkbox"]):focus,
+.dashboard-content select:focus,
+.dashboard-content textarea:focus {
+  border-color: #8098f9;
+  box-shadow: 0 0 0 3px rgb(70 95 255 / 12%);
+  outline: none;
+}
+.dashboard-content button[class*="bg-indigo-700"],
+.dashboard-content button[class*="bg-indigo-600"] {
+  background-color: #465fff;
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+.dashboard-content button[class*="bg-indigo-700"]:hover,
+.dashboard-content button[class*="bg-indigo-600"]:hover {
+  background-color: #3641f5;
+  box-shadow: 0 4px 12px rgb(70 95 255 / 20%);
+}
+.dashboard-content button[class*="border-slate-200"]:hover {
+  border-color: #cbd5e1;
+}
+.dashboard-content [class*="text-indigo-700"],
+.dashboard-content [class*="text-indigo-800"] {
+  color: #465fff;
+}
+.dashboard-content [class*="bg-indigo-50"] {
+  background-color: #eff4ff;
+}
+.dashboard-content [class*="border-indigo-100"],
+.dashboard-content [class*="border-indigo-200"] {
+  border-color: #d1ddff;
+}
+.dashboard-content .divide-y > * {
+  transition: background-color 150ms ease;
+}
+.dashboard-content .divide-y > *:hover {
+  background-color: #f8faff;
+}
+.dashboard-content [role="alert"] {
+  border-radius: 10px;
+}
+.dashboard-content article[class*="rounded-2xl"][class*="bg-white"] {
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+.dashboard-content article[class*="rounded-2xl"][class*="bg-white"]:hover {
+  border-color: #c9d5ff;
+  box-shadow: 0 8px 22px rgb(16 24 40 / 7%);
+  transform: translateY(-2px);
+}
+.dashboard-content
+  article[class*="rounded-2xl"][class*="bg-white"]:focus-within {
+  border-color: #8098f9;
+  box-shadow: 0 0 0 3px rgb(70 95 255 / 10%);
+}
+.dashboard-content button[class*="rounded-2xl"][class*="bg-white"] {
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+.dashboard-content button[class*="rounded-2xl"][class*="bg-white"]:hover {
+  border-color: #c9d5ff;
+  box-shadow: 0 8px 22px rgb(16 24 40 / 7%);
+  transform: translateY(-2px);
+}
+[data-slot="dialog-content"] {
+  border-color: #e4e7ec;
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgb(16 24 40 / 18%);
+}
+[data-slot="dialog-content"] input,
+[data-slot="dialog-content"] select,
+[data-slot="dialog-content"] textarea {
+  border-color: #d0d5dd;
+  border-radius: 8px;
+}
+@media (max-width: 1023px) {
+  .dashboard-content {
+    background-image: none;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @media print {
-  @page { margin: 16mm; }
-  body { background: white !important; color: #111827 !important; }
-  header, aside, button, input, select, textarea, [role="dialog"] { display: none !important; }
-  main { max-width: none !important; padding: 0 !important; }
-  .rounded-2xl, .rounded-xl { border-color: #d1d5db !important; box-shadow: none !important; }
-  a { color: #111827 !important; text-decoration: none !important; }
+  @page {
+    margin: 16mm;
+  }
+  body {
+    background: white !important;
+    color: #111827 !important;
+  }
+  header,
+  aside,
+  button,
+  input,
+  select,
+  textarea,
+  [role="dialog"] {
+    display: none !important;
+  }
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .rounded-2xl,
+  .rounded-xl {
+    border-color: #d1d5db !important;
+    box-shadow: none !important;
+  }
+  a {
+    color: #111827 !important;
+    text-decoration: none !important;
+  }
 }

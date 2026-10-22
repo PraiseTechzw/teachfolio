@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { trpc } from "@/lib/trpc";
 import PortfolioFormDialog from "@/components/PortfolioFormDialog";
 import Workspace from "@/pages/Workspace";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AuthAside,
   AuthExperience,
@@ -10,21 +19,30 @@ import {
 import {
   Bell,
   BookOpen,
+  Building2,
+  ChartColumn,
   ChevronDown,
+  ClipboardCheck,
   CircleHelp,
   ClipboardList,
   FileText,
-  FolderHeart,
-  GraduationCap,
+  FolderOpen,
   LayoutDashboard,
   LogOut,
+  MapPin,
   Menu,
+  MoreHorizontal,
   MessageSquareText,
+  NotebookPen,
+  PanelLeftClose,
+  PanelLeftOpen,
   ScrollText,
   Search,
+  Send,
   Settings,
   ShieldCheck,
   Users,
+  UserRoundCheck,
   X,
 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -73,13 +91,13 @@ const navBase = [
   {
     label: "My placement",
     path: "/placement",
-    icon: GraduationCap,
+    icon: MapPin,
     roles: ["student_teacher"],
   },
   {
     label: "My portfolio",
     path: "/portfolio",
-    icon: FolderHeart,
+    icon: FolderOpen,
     roles: ["student_teacher"],
   },
   {
@@ -91,7 +109,7 @@ const navBase = [
   {
     label: "Lesson plans",
     path: "/lessons",
-    icon: FileText,
+    icon: NotebookPen,
     roles: ["student_teacher"],
   },
   {
@@ -103,13 +121,13 @@ const navBase = [
   {
     label: "Teaching evidence",
     path: "/evidence",
-    icon: ClipboardList,
+    icon: ClipboardCheck,
     roles: ["student_teacher"],
   },
   {
     label: "Submissions",
     path: "/submissions",
-    icon: FileText,
+    icon: Send,
     roles: [
       "student_teacher",
       "supervisor",
@@ -133,7 +151,7 @@ const navBase = [
   {
     label: "Reports",
     path: "/reports",
-    icon: ClipboardList,
+    icon: ChartColumn,
     roles: ["coordinator", "institution_admin"],
   },
   {
@@ -158,7 +176,7 @@ const navBase = [
   {
     label: "User activation",
     path: "/admin/users",
-    icon: Users,
+    icon: UserRoundCheck,
     roles: ["institution_admin"],
   },
   {
@@ -170,7 +188,7 @@ const navBase = [
   {
     label: "Institution administration",
     path: "/admin/institutions",
-    icon: ShieldCheck,
+    icon: Building2,
     roles: ["platform_admin"],
   },
   {
@@ -188,11 +206,11 @@ const navBase = [
   },
 ];
 
-function Brand() {
+function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
       <img src="/teachfolio-mark.svg" alt="" className="h-9 w-9" />
-      <span>
+      <span className={compact ? "lg:hidden" : undefined}>
         <strong className="block text-[15px] font-semibold tracking-tight text-slate-900">
           Teachfolio
         </strong>
@@ -202,6 +220,31 @@ function Brand() {
       </span>
     </div>
   );
+}
+function navigationSection(label: string) {
+  if (label === "Overview") return "MENU";
+  if (label === "Notifications") return "SUPPORT";
+  if (
+    [
+      "My placement",
+      "My portfolio",
+      "Schemes of work",
+      "Lesson plans",
+      "Reflective journal",
+      "Teaching evidence",
+    ].includes(label)
+  )
+    return "TEACHING PRACTICE";
+  if (
+    [
+      "Submissions",
+      "Review queue",
+      "Feedback & assessments",
+      "Reports",
+    ].includes(label)
+  )
+    return "REVIEW & PROGRESS";
+  return "OTHERS";
 }
 function LoadingScreen() {
   return (
@@ -340,7 +383,16 @@ function ActivationScreen({
 
 export default function App() {
   const [path, navigate] = useLocation();
+  const prefersReducedMotion = useReducedMotion();
+  const [sidebarExpanded, setSidebarExpanded] = useState(() => {
+    try {
+      return localStorage.getItem("teachfolio-sidebar-expanded") !== "false";
+    } catch {
+      return true;
+    }
+  });
   const [menuOpen, setMenuOpen] = useState(false);
+  const [quickAccessOpen, setQuickAccessOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [formKind, setFormKind] = useState<Kind>("lesson");
   const [editing, setEditing] = useState<Entry | null>(null);
@@ -378,9 +430,21 @@ export default function App() {
   const unread = alerts.data?.filter(note => !note.readAt).length ?? 0;
   const allowedNav = useMemo(
     () =>
-      navBase.filter(item =>
-        access?.roles.some(role => item.roles.includes(role))
-      ),
+      navBase
+        .filter(item => access?.roles.some(role => item.roles.includes(role)))
+        .sort((a, b) => {
+          const order = [
+            "MENU",
+            "TEACHING PRACTICE",
+            "REVIEW & PROGRESS",
+            "SUPPORT",
+            "OTHERS",
+          ];
+          return (
+            order.indexOf(navigationSection(a.label)) -
+            order.indexOf(navigationSection(b.label))
+          );
+        }),
     [access?.roles]
   );
   useEffect(() => {
@@ -434,8 +498,19 @@ export default function App() {
   }, [access?.id]);
   useEffect(() => {
     setMenuOpen(false);
+    setQuickAccessOpen(false);
     setSearch("");
   }, [path]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "teachfolio-sidebar-expanded",
+        String(sidebarExpanded)
+      );
+    } catch {
+      // Sidebar preference is optional when browser storage is unavailable.
+    }
+  }, [sidebarExpanded]);
 
   if (recoveryTokens)
     return (
@@ -497,27 +572,40 @@ export default function App() {
     setFormOpen(true);
   };
   const displayPath = path.match(/^\/item\/\d+$/) ? "/portfolio" : path;
-  const breadcrumb =
-    allowedNav.find(item => item.path === displayPath)?.label ??
-    (path.startsWith("/item/") ? "Record detail" : "Workspace");
   const roleLabel = access.roles
     .map(role => role.replaceAll("_", " "))
     .join(" · ");
   const isPlatform = access.roles.includes("platform_admin");
   return (
-    <div className="min-h-screen bg-[#f7f8fb] text-slate-900">
+    <div className="dashboard-shell min-h-screen bg-[#f6f7fb] text-slate-900">
       {menuOpen && (
         <button
           aria-label="Close navigation"
           onClick={() => setMenuOpen(false)}
-          className="fixed inset-0 z-30 bg-slate-950/35 lg:hidden"
+          className="fixed inset-0 z-30 bg-slate-950/35 backdrop-blur-[2px] transition-opacity lg:hidden"
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[270px] flex-col border-r border-slate-200 bg-white transition-transform duration-200 lg:translate-x-0 ${menuOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`dashboard-sidebar fixed inset-y-0 left-0 z-40 flex w-[290px] flex-col border-r border-slate-200 bg-white transition-[width,transform] duration-300 ease-[cubic-bezier(.4,0,.2,1)] ${sidebarExpanded ? "lg:w-[290px]" : "lg:w-[88px]"} lg:translate-x-0 ${menuOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div className="flex h-16 items-center justify-between border-b border-slate-100 px-5">
-          <Brand />
+        <div
+          className={`flex shrink-0 border-b border-slate-100 ${sidebarExpanded ? "h-[76px] items-center justify-between px-5" : "h-[76px] items-center justify-between px-5 lg:h-[104px] lg:flex-col lg:justify-center lg:gap-3 lg:px-2"}`}
+        >
+          <Brand compact={!sidebarExpanded} />
+          <button
+            type="button"
+            onClick={() => setSidebarExpanded(value => !value)}
+            aria-label={sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+            aria-expanded={sidebarExpanded}
+            title={sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+            className="hidden rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 lg:inline-flex"
+          >
+            {sidebarExpanded ? (
+              <PanelLeftClose size={18} />
+            ) : (
+              <PanelLeftOpen size={18} />
+            )}
+          </button>
           <button
             className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
             onClick={() => setMenuOpen(false)}
@@ -526,12 +614,12 @@ export default function App() {
             <X size={18} />
           </button>
         </div>
-        <div className="px-4 pt-5">
-          <div className="rounded-xl bg-slate-50 px-3 py-2.5">
-            <p className="truncate text-xs font-semibold capitalize text-slate-800">
+        <div className={`px-4 pt-5 ${sidebarExpanded ? "" : "lg:hidden"}`}>
+          <div className="border-b border-slate-100 px-2 pb-4">
+            <p className="truncate text-[10px] font-semibold uppercase tracking-[.13em] text-slate-400">
               {roleLabel || "No active role"}
             </p>
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1.5 truncate text-xs font-medium text-slate-600">
               {isPlatform
                 ? "Platform access"
                 : access.institutionId
@@ -542,41 +630,81 @@ export default function App() {
         </div>
         <nav
           aria-label="Primary navigation"
-          className="mt-4 flex-1 space-y-1 overflow-y-auto px-3 pb-4"
+          className={`mt-5 flex-1 space-y-1 overflow-y-auto pb-4 ${sidebarExpanded ? "px-3" : "px-3 lg:mt-4 lg:px-2"}`}
         >
-          {allowedNav.map(item => {
+          {allowedNav.map((item, index) => {
             const active =
               displayPath === item.path ||
               (item.path === "/portfolio" && path.startsWith("/item/"));
             const Icon = item.icon;
+            const section = navigationSection(item.label);
+            const previousSection =
+              index > 0 ? navigationSection(allowedNav[index - 1].label) : null;
             return (
-              <button
-                key={item.path}
-                type="button"
-                onClick={() => navigate(item.path)}
-                aria-current={active ? "page" : undefined}
-                className={`flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium transition ${active ? "bg-indigo-50 text-indigo-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
-              >
-                <Icon
-                  size={17}
-                  className={active ? "text-indigo-700" : "text-slate-400"}
-                />
-                <span className="flex-1">{item.label}</span>
-                {item.path === "/notifications" && unread > 0 && (
-                  <span className="grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
-                    {unread > 9 ? "9+" : unread}
-                  </span>
+              <div key={item.path}>
+                {section !== previousSection && (
+                  <p
+                    className={`px-3 pb-2 text-[11px] font-medium uppercase tracking-[.08em] text-slate-400 ${index ? "pt-7" : "pt-1"} lg:transition-opacity lg:duration-150 ${sidebarExpanded ? "" : "lg:hidden"}`}
+                  >
+                    {section}
+                  </p>
                 )}
-              </button>
+                {section !== previousSection &&
+                  !sidebarExpanded &&
+                  index > 0 && (
+                    <span
+                      className="hidden h-8 items-center justify-center text-slate-300 lg:flex"
+                      aria-hidden="true"
+                    >
+                      <MoreHorizontal size={16} />
+                    </span>
+                  )}
+                <button
+                  type="button"
+                  onClick={() => navigate(item.path)}
+                  aria-current={active ? "page" : undefined}
+                  aria-label={item.label}
+                  title={sidebarExpanded ? undefined : item.label}
+                  className={`group relative flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium transition-colors duration-200 ${sidebarExpanded ? "" : "lg:justify-center lg:px-0"} ${active ? "bg-[#eff4ff] text-[#465fff]" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                >
+                  <Icon
+                    size={20}
+                    strokeWidth={1.75}
+                    className={
+                      active
+                        ? "text-[#465fff]"
+                        : "text-slate-400 transition-colors group-hover:text-slate-600"
+                    }
+                  />
+                  <span
+                    className={`flex-1 ${sidebarExpanded ? "" : "lg:hidden"}`}
+                  >
+                    {item.label}
+                  </span>
+                  {item.path === "/notifications" && unread > 0 && (
+                    <span className="grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
+                      {unread > 9 ? "9+" : unread}
+                    </span>
+                  )}
+                </button>
+              </div>
             );
           })}
         </nav>
-        <div className="border-t border-slate-100 p-3">
-          <div className="flex items-center gap-2 rounded-xl p-2">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-indigo-100 text-sm font-semibold text-indigo-800">
+        <div
+          className={`border-t border-slate-100 p-3 ${sidebarExpanded ? "" : "lg:px-2"}`}
+        >
+          <div
+            className={`flex items-center gap-2 rounded-xl p-2 ${sidebarExpanded ? "" : "lg:justify-center lg:p-1"}`}
+          >
+            <span
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-full bg-indigo-100 text-sm font-semibold text-indigo-800 ring-2 ring-white ${sidebarExpanded ? "" : "lg:h-8 lg:w-8"}`}
+            >
               {(access.name || access.email || "U").slice(0, 1).toUpperCase()}
             </span>
-            <div className="min-w-0 flex-1">
+            <div
+              className={`min-w-0 flex-1 ${sidebarExpanded ? "" : "lg:hidden"}`}
+            >
               <p className="truncate text-xs font-semibold">
                 {access.name || "Authenticated user"}
               </p>
@@ -589,81 +717,247 @@ export default function App() {
               aria-label="Sign out"
               title="Sign out"
               onClick={() => logout.mutate()}
-              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+              className={`rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 ${sidebarExpanded ? "" : "lg:p-1"}`}
             >
               <LogOut size={16} />
             </button>
           </div>
-          <p className="px-2 pb-1 text-[10px] text-slate-400">
+          <p
+            className={`px-2 pb-1 text-[10px] text-slate-400 ${sidebarExpanded ? "" : "lg:hidden"}`}
+          >
             Secure portfolio · demo content not institutional results
           </p>
         </div>
       </aside>
-      <div className="min-h-screen lg:pl-[270px]">
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
-          <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
-            <button
-              onClick={() => setMenuOpen(true)}
-              className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
-              aria-label="Open navigation"
-            >
-              <Menu size={19} />
-            </button>
-            <div className="hidden text-xs text-slate-400 sm:block">
-              Teachfolio <span className="mx-1.5">/</span>{" "}
-              <span className="font-medium text-slate-700">{breadcrumb}</span>
-            </div>
-            <div className="relative ml-auto flex w-full max-w-md items-center sm:ml-6">
-              <Search size={16} className="absolute left-3 text-slate-400" />
+      <div
+        className={`min-h-screen transition-[padding] duration-300 ease-[cubic-bezier(.4,0,.2,1)] ${sidebarExpanded ? "lg:pl-[290px]" : "lg:pl-[88px]"}`}
+      >
+        <header className="dashboard-header sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 backdrop-blur-xl">
+          <div className="hidden h-[72px] items-center justify-between gap-6 px-5 sm:px-7 lg:flex lg:px-8">
+            <div className="relative w-full max-w-[360px]">
+              <Search
+                size={17}
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+              />
               <input
                 aria-label="Search authorized portfolio records"
                 value={search}
                 onChange={event => setSearch(event.target.value)}
-                placeholder="Search your authorized records…"
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+                placeholder="Search your records..."
+                className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-[13px] text-slate-700 shadow-sm outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60"
               />
             </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => navigate("/notifications")}
+                aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}
+                className="relative grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800"
+              >
+                <Bell size={19} strokeWidth={1.8} />
+                {unread > 0 && (
+                  <span className="absolute right-2 top-2 size-2 rounded-full bg-rose-500 ring-2 ring-white" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setHelpOpen(true)}
+                className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800"
+                aria-label="Help and privacy"
+                title="Help and privacy"
+              >
+                <CircleHelp size={19} strokeWidth={1.8} />
+              </button>
+              <div className="mx-1 h-8 border-l border-slate-200" />
+              <DropdownMenu>
+                <DropdownMenuTrigger className="group flex items-center gap-2.5 rounded-lg outline-none focus-visible:ring-4 focus-visible:ring-indigo-100">
+                  <span className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-slate-100 text-sm font-semibold text-slate-700">
+                    {(access.name || access.email || "U")
+                      .slice(0, 1)
+                      .toUpperCase()}
+                  </span>
+                  <span className="max-w-36 text-left">
+                    <span className="block truncate text-[13px] font-medium text-slate-800">
+                      {access.name || "Your account"}
+                    </span>
+                    <span className="block truncate text-[11px] text-slate-500">
+                      {access.email}
+                    </span>
+                  </span>
+                  <ChevronDown
+                    size={15}
+                    className="text-slate-400 transition-transform group-data-[state=open]:rotate-180"
+                  />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-72 rounded-xl border-slate-200 p-1.5 shadow-xl"
+                >
+                  <DropdownMenuLabel className="px-3 py-2.5 font-normal">
+                    <span className="block truncate text-sm font-semibold text-slate-900">
+                      {access.name || "Authenticated user"}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-slate-500">
+                      {access.email}
+                    </span>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => navigate("/settings")}
+                    className="cursor-pointer rounded-lg px-3 py-2.5"
+                  >
+                    <Settings size={16} />
+                    Account settings
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => logout.mutate()}
+                    className="cursor-pointer rounded-lg px-3 py-2.5 text-rose-700 focus:text-rose-700"
+                  >
+                    <LogOut size={16} />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          <div className="grid h-[68px] grid-cols-[1fr_auto_1fr] items-center px-3 lg:hidden">
             <button
-              onClick={() => navigate("/notifications")}
-              aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}
-              className="relative rounded-lg p-2.5 text-slate-500 hover:bg-slate-100"
+              onClick={() => {
+                setQuickAccessOpen(false);
+                setMenuOpen(true);
+              }}
+              className="-ml-1 grid size-10 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+              aria-label="Open navigation"
+              aria-expanded={menuOpen}
             >
-              <Bell size={18} />
-              {unread > 0 && (
-                <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-rose-600 ring-2 ring-white" />
-              )}
+              <Menu size={21} strokeWidth={1.8} />
             </button>
+            <div className="justify-self-center">
+              <Brand />
+            </div>
             <button
-              onClick={() => setHelpOpen(true)}
-              className="hidden items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 sm:inline-flex"
+              type="button"
+              onClick={() => setQuickAccessOpen(open => !open)}
+              className={`-mr-1 grid size-10 place-items-center justify-self-end rounded-lg transition-colors ${quickAccessOpen ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`}
+              aria-label={
+                quickAccessOpen ? "Close quick access" : "Open quick access"
+              }
+              aria-expanded={quickAccessOpen}
             >
-              <CircleHelp size={16} />
-              Help
-            </button>
-            <div className="hidden h-7 border-l border-slate-200 md:block" />
-            <button
-              onClick={() => navigate("/settings")}
-              className="hidden items-center gap-2 rounded-lg p-1.5 hover:bg-slate-50 sm:flex"
-            >
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-indigo-100 text-xs font-semibold text-indigo-800">
-                {(access.name || "U").slice(0, 1).toUpperCase()}
-              </span>
-              <ChevronDown size={14} className="text-slate-400" />
+              <MoreHorizontal size={22} />
             </button>
           </div>
+
+          <AnimatePresence initial={false}>
+            {quickAccessOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: prefersReducedMotion ? 0 : 0.18 }}
+                className="overflow-hidden border-t border-slate-100 lg:hidden"
+              >
+                <div className="space-y-4 px-4 py-4 sm:px-6">
+                  <div className="relative">
+                    <Search
+                      size={17}
+                      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+                    <input
+                      aria-label="Search authorized portfolio records"
+                      value={search}
+                      onChange={event => setSearch(event.target.value)}
+                      placeholder="Search your records..."
+                      className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100/60"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => navigate("/notifications")}
+                      className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                    >
+                      <span className="relative">
+                        <Bell size={17} />
+                        {unread > 0 && (
+                          <span className="absolute -right-1 -top-1 size-1.5 rounded-full bg-rose-500" />
+                        )}
+                      </span>
+                      Notifications
+                    </button>
+                    <button
+                      onClick={() => {
+                        setQuickAccessOpen(false);
+                        setHelpOpen(true);
+                      }}
+                      className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                    >
+                      <CircleHelp size={17} />
+                      Help
+                    </button>
+                    <button
+                      onClick={() => navigate("/settings")}
+                      className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                    >
+                      <Settings size={17} />
+                      Settings
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-sm font-semibold text-slate-700">
+                        {(access.name || access.email || "U")
+                          .slice(0, 1)
+                          .toUpperCase()}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-slate-800">
+                          {access.name || "Your account"}
+                        </span>
+                        <span className="block truncate text-xs text-slate-500">
+                          {access.email}
+                        </span>
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => logout.mutate()}
+                      className="ml-3 inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-50"
+                    >
+                      <LogOut size={15} />
+                      Sign out
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </header>
         <main
           id="main-content"
-          className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8"
+          className="dashboard-content mx-auto max-w-[1500px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8"
         >
-          <Workspace
-            path={path}
-            searchTerm={search}
-            user={access}
-            onCreate={openCreate}
-            onEdit={openEdit}
-            onNavigate={navigate}
-          />
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={path}
+              initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: prefersReducedMotion ? 0 : -4 }}
+              transition={{
+                duration: prefersReducedMotion ? 0 : 0.2,
+                ease: "easeOut",
+              }}
+            >
+              <Workspace
+                path={path}
+                searchTerm={search}
+                user={access}
+                onCreate={openCreate}
+                onEdit={openEdit}
+                onNavigate={navigate}
+              />
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
       {helpOpen && (
@@ -678,7 +972,7 @@ export default function App() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="help-title"
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
           >
             <div className="flex items-start justify-between">
               <div>

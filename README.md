@@ -30,7 +30,9 @@ Open `http://localhost:3000`. New accounts use Supabase Auth email/password and 
 The first platform administrator must be provisioned by a trusted operator after the target user registers and signs in. Find that user's `openId` in the `users` table, then run this server-side against the configured Supabase database:
 
 ```sh
-pnpm provision:platform-admin <exact-supabase-auth-user-id> --confirm-trusted-platform-admin
+pnpm provision:platform-admin e1416b2e-3a0b-41fe-b78d-10b5b61372e0 --confirm-trusted-platform-admin
+
+e1416b2e-3a0b-41fe-b78d-10b5b61372e0
 ```
 
 This adds a platform-wide assignment and audit record. Never expose the command through a public endpoint. Platform administrators create institutions and issue invitations. Institution administrators can invite users only to their institution. Invitations are single-use, role- and institution-bound, expire after seven days, and match the exact email. Share invitation tokens only through an institution-approved secure channel.
