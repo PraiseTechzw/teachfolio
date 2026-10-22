@@ -44,7 +44,7 @@ import {
 import { parse as parseCookieHeader } from "cookie";
 import { COOKIE_NAME } from "@shared/const";
 import { systemRouter } from "./_core/systemRouter";
-import { clearAuthCookies, REFRESH_COOKIE, registerAccount, revokeSession, signInAccount, supabaseIdentity } from "./supabase-auth";
+import { changePassword, clearAuthCookies, establishSupabaseSession, REFRESH_COOKIE, registerAccount, revokeSession, sendPasswordReset, signInAccount, supabaseIdentity } from "./supabase-auth";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
 const kindSchema = z.enum([
@@ -206,6 +206,25 @@ const appRouter = router({
       const identity = supabaseIdentity(authUser);
       await db.upsertUser({ ...identity, loginMethod: "supabase", lastSignedIn: new Date() });
       return { success: true } as const;
+    }),
+    confirmSession: publicProcedure.input(z.object({ accessToken: z.string().min(20), refreshToken: z.string().min(20) })).mutation(async ({ ctx, input }) => {
+      try {
+        const authUser = await establishSupabaseSession(input.accessToken, input.refreshToken, ctx.req, ctx.res);
+        await db.upsertUser({ ...supabaseIdentity(authUser), loginMethod: "supabase", lastSignedIn: new Date() });
+        return { success: true } as const;
+      } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "This email confirmation link is invalid or expired. Request a new link and try again." }); }
+    }),
+    requestPasswordReset: publicProcedure.input(z.object({ email: z.string().email().max(320) })).mutation(async ({ ctx, input }) => {
+      const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
+      try { await sendPasswordReset(input.email, origin); } catch { /* Keep responses indistinguishable for unknown emails. */ }
+      return { success: true } as const;
+    }),
+    updatePassword: publicProcedure.input(z.object({ accessToken: z.string().min(20), refreshToken: z.string().min(20), password: z.string().min(12).max(128) })).mutation(async ({ ctx, input }) => {
+      try {
+        const authUser = await changePassword(input.accessToken, input.refreshToken, input.password, ctx.req, ctx.res);
+        await db.upsertUser({ ...supabaseIdentity(authUser), loginMethod: "supabase", lastSignedIn: new Date() });
+        return { success: true } as const;
+      } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "This password reset link is invalid or expired. Request a new one and try again." }); }
     }),
     me: publicProcedure.query(async ({ ctx }) => {
       if (!ctx.user) return null;

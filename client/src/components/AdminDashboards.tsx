@@ -321,7 +321,7 @@ export function UserActivationDashboard({
       <SectionHeading
         eyebrow="INSTITUTION ADMINISTRATION"
         title="User activation"
-        description="Review access assignments and institution-issued invitations. Role changes are administrator-controlled; invited accounts receive access only after the matching OAuth account redeems its single-use token."
+        description="Review access assignments and institution-issued invitations. Role changes are administrator-controlled; invited accounts receive access only after the matching Supabase account redeems its single-use token."
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric
@@ -333,7 +333,7 @@ export function UserActivationDashboard({
         <Metric
           label="Pending activation"
           value={pendingCount}
-          detail="Invitations awaiting the intended OAuth account"
+          detail="Invitations awaiting the intended Supabase account"
           tone="amber"
         />
         <Metric
@@ -425,7 +425,7 @@ export function UserActivationDashboard({
                 >
                   <div className="min-w-0">
                     <p className="break-all text-sm font-semibold text-slate-800">
-                      {row.user.name || "OAuth account"}
+                      {row.user.name || "Supabase account"}
                     </p>
                     <p className="mt-1 break-all text-xs text-slate-500">
                       {row.user.email || "No email on file"}
@@ -510,7 +510,7 @@ export function UserActivationDashboard({
           </div>
           <p className="mt-2 text-xs leading-relaxed text-slate-500">
             Select the intended role. The account stays inactive until its
-            signed-in OAuth email matches and the one-time token is claimed.
+            signed-in Supabase email matches and the one-time token is claimed.
             Delivery is manual.
           </p>
           <label className="mt-4 block text-xs font-semibold text-slate-600">
@@ -917,7 +917,7 @@ export function PlatformInstitutionDashboard({
           </div>
           <p className="mt-2 text-xs leading-relaxed text-slate-500">
             The platform role is fixed to institution administrator. The invited
-            OAuth email must redeem a one-time token; no email is sent.
+            Supabase email must redeem a one-time token; no email is sent.
           </p>
           <label className="mt-4 block text-xs font-semibold text-slate-600">
             Institution

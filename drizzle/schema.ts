@@ -28,7 +28,7 @@ export const users = pgTable("users", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
   lastSignedIn: timestamp("lastSignedIn", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const institutions = pgTable("institutions", {
   id: serial("id").primaryKey(),
@@ -37,7 +37,7 @@ export const institutions = pgTable("institutions", {
   isDemo: boolean("isDemo").default(false).notNull(),
   active: boolean("active").default(true).notNull(),
   createdAt: createdAt(),
-});
+}).enableRLS();
 
 export const accessAssignments = pgTable("access_assignments", {
   id: serial("id").primaryKey(),
@@ -48,7 +48,7 @@ export const accessAssignments = pgTable("access_assignments", {
   assignedBy: integer("assignedBy").references(() => users.id),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, table => ({ userIdx: index("access_user_idx").on(table.userId), tenantIdx: index("access_tenant_idx").on(table.institutionId), uniqueAssignment: uniqueIndex("access_assignment_unique").on(table.userId, table.institutionId, table.role) }));
+}, table => ({ userIdx: index("access_user_idx").on(table.userId), tenantIdx: index("access_tenant_idx").on(table.institutionId), uniqueAssignment: uniqueIndex("access_assignment_unique").on(table.userId, table.institutionId, table.role) })).enableRLS();
 
 export const invitations = pgTable("invitations", {
   id: serial("id").primaryKey(),
@@ -60,7 +60,7 @@ export const invitations = pgTable("invitations", {
   acceptedAt: timestamp("acceptedAt", { withTimezone: true, mode: "date" }),
   createdBy: integer("createdBy").notNull().references(() => users.id),
   createdAt: createdAt(),
-}, table => ({ tenantIdx: index("invite_tenant_idx").on(table.institutionId) }));
+}, table => ({ tenantIdx: index("invite_tenant_idx").on(table.institutionId) })).enableRLS();
 
 export const placements = pgTable("placements", {
   id: serial("id").primaryKey(),
@@ -79,7 +79,7 @@ export const placements = pgTable("placements", {
   lecturerUserId: integer("lecturerUserId").references(() => users.id),
   status: placementStatus("status").default("active").notNull(),
   createdAt: createdAt(),
-}, table => ({ tenantIdx: index("placement_tenant_idx").on(table.institutionId), studentIdx: index("placement_student_idx").on(table.studentUserId), supervisorIdx: index("placement_supervisor_idx").on(table.supervisorUserId) }));
+}, table => ({ tenantIdx: index("placement_tenant_idx").on(table.institutionId), studentIdx: index("placement_student_idx").on(table.studentUserId), supervisorIdx: index("placement_supervisor_idx").on(table.supervisorUserId) })).enableRLS();
 
 export const portfolioRequirements = pgTable("portfolio_requirements", {
   id: serial("id").primaryKey(),
@@ -90,7 +90,7 @@ export const portfolioRequirements = pgTable("portfolio_requirements", {
   required: boolean("required").default(true).notNull(),
   deadline: varchar("deadline", { length: 10 }),
   createdAt: createdAt(),
-}, table => ({ tenantIdx: index("requirement_tenant_idx").on(table.institutionId) }));
+}, table => ({ tenantIdx: index("requirement_tenant_idx").on(table.institutionId) })).enableRLS();
 
 export const portfolioEntries = pgTable("portfolio_entries", {
   id: serial("id").primaryKey(),
@@ -106,7 +106,7 @@ export const portfolioEntries = pgTable("portfolio_entries", {
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, table => ({ ownerIdx: index("entry_owner_idx").on(table.userId, table.institutionId), statusIdx: index("entry_status_idx").on(table.institutionId, table.status), categoryIdx: index("entry_category_idx").on(table.institutionId, table.kind) }));
+}, table => ({ ownerIdx: index("entry_owner_idx").on(table.userId, table.institutionId), statusIdx: index("entry_status_idx").on(table.institutionId, table.status), categoryIdx: index("entry_category_idx").on(table.institutionId, table.kind) })).enableRLS();
 
 export const submissionVersions = pgTable("submission_versions", {
   id: serial("id").primaryKey(),
@@ -115,8 +115,8 @@ export const submissionVersions = pgTable("submission_versions", {
   version: integer("version").notNull(),
   snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
   status: varchar("status", { length: 40 }).notNull(),
-  submittedAt: createdAt(),
-}, table => ({ entryVersionUnique: uniqueIndex("submission_entry_version_unique").on(table.entryId, table.version), tenantIdx: index("submission_tenant_idx").on(table.institutionId) }));
+  submittedAt: timestamp("submittedAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+}, table => ({ entryVersionUnique: uniqueIndex("submission_entry_version_unique").on(table.entryId, table.version), tenantIdx: index("submission_tenant_idx").on(table.institutionId) })).enableRLS();
 
 export const evidenceFiles = pgTable("evidence_files", {
   id: serial("id").primaryKey(),
@@ -129,7 +129,7 @@ export const evidenceFiles = pgTable("evidence_files", {
   byteSize: integer("byteSize").notNull(),
   consentConfirmed: boolean("consentConfirmed").default(false).notNull(),
   createdAt: createdAt(),
-}, table => ({ entryIdx: index("evidence_entry_idx").on(table.entryId, table.institutionId), uploaderIdx: index("evidence_uploader_idx").on(table.uploaderUserId) }));
+}, table => ({ entryIdx: index("evidence_entry_idx").on(table.entryId, table.institutionId), uploaderIdx: index("evidence_uploader_idx").on(table.uploaderUserId) })).enableRLS();
 
 export const reviews = pgTable("reviews", {
   id: serial("id").primaryKey(),
@@ -141,7 +141,7 @@ export const reviews = pgTable("reviews", {
   comments: text("comments").notNull(),
   rubric: jsonb("rubric").$type<ReviewRubricSnapshot>(),
   createdAt: createdAt(),
-}, table => ({ entryIdx: index("review_entry_idx").on(table.entryId), tenantIdx: index("review_tenant_idx").on(table.institutionId) }));
+}, table => ({ entryIdx: index("review_entry_idx").on(table.entryId), tenantIdx: index("review_tenant_idx").on(table.institutionId) })).enableRLS();
 
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
@@ -152,7 +152,7 @@ export const notifications = pgTable("notifications", {
   href: varchar("href", { length: 250 }).notNull(),
   readAt: timestamp("readAt", { withTimezone: true, mode: "date" }),
   createdAt: createdAt(),
-}, table => ({ userIdx: index("notification_user_idx").on(table.userId, table.institutionId) }));
+}, table => ({ userIdx: index("notification_user_idx").on(table.userId, table.institutionId) })).enableRLS();
 
 export const auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),
@@ -163,7 +163,7 @@ export const auditLogs = pgTable("audit_logs", {
   targetId: varchar("targetId", { length: 80 }).notNull(),
   detail: text("detail"),
   createdAt: createdAt(),
-}, table => ({ tenantIdx: index("audit_tenant_idx").on(table.institutionId), actorIdx: index("audit_actor_idx").on(table.actorUserId) }));
+}, table => ({ tenantIdx: index("audit_tenant_idx").on(table.institutionId), actorIdx: index("audit_actor_idx").on(table.actorUserId) })).enableRLS();
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;

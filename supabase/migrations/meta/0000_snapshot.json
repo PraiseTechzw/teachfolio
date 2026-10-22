@@ -166,7 +166,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.audit_logs": {
       "name": "audit_logs",
@@ -286,7 +286,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.evidence_files": {
       "name": "evidence_files",
@@ -446,7 +446,7 @@
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.institutions": {
       "name": "institutions",
@@ -506,7 +506,7 @@
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.invitations": {
       "name": "invitations",
@@ -626,7 +626,7 @@
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.notifications": {
       "name": "notifications",
@@ -737,7 +737,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.placements": {
       "name": "placements",
@@ -948,7 +948,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.portfolio_entries": {
       "name": "portfolio_entries",
@@ -1139,7 +1139,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.portfolio_requirements": {
       "name": "portfolio_requirements",
@@ -1234,7 +1234,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.reviews": {
       "name": "reviews",
@@ -1374,7 +1374,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.submission_versions": {
       "name": "submission_versions",
@@ -1416,8 +1416,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "createdAt": {
-          "name": "createdAt",
+        "submittedAt": {
+          "name": "submittedAt",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -1494,7 +1494,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.users": {
       "name": "users",
@@ -1574,7 +1574,7 @@
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     }
   },
   "enums": {},

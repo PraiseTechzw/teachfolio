@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import PortfolioFormDialog from "@/components/PortfolioFormDialog";
 import Workspace from "@/pages/Workspace";
+import { AuthAside, AuthExperience, PasswordRecoveryScreen } from "@/components/auth/AuthExperience";
 import { Bell, BookOpen, ChevronDown, CircleHelp, ClipboardList, FileText, FolderHeart, GraduationCap, LayoutDashboard, LogOut, Menu, MessageSquareText, ScrollText, Search, Settings, ShieldCheck, Users, X } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -28,41 +29,46 @@ const navBase = [
   { label: "Settings", path: "/settings", icon: Settings, roles: ["student_teacher", "supervisor", "lecturer", "coordinator", "institution_admin", "platform_admin"] },
 ];
 
-function Brand() { return <div className="flex items-center gap-2.5"><span className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-700 text-white shadow-sm"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true"><path d="M5 4.5h10.5a2 2 0 0 1 2 2V20H7a2 2 0 0 1-2-2V4.5Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M8.5 8h6M8.5 11.5h6M9 16l1.6 1.6 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/><path d="M17.5 7H20v13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg></span><span><strong className="block text-[15px] font-semibold tracking-tight text-slate-900">Teachfolio</strong><span className="block text-[10px] font-semibold uppercase tracking-[.14em] text-slate-500">Practice portfolio</span></span></div>; }
+function Brand() { return <div className="flex items-center gap-2.5"><img src="/teachfolio-mark.svg" alt="" className="h-9 w-9"/><span><strong className="block text-[15px] font-semibold tracking-tight text-slate-900">Teachfolio</strong><span className="block text-[10px] font-semibold uppercase tracking-[.14em] text-slate-500">Practice portfolio</span></span></div>; }
 function LoadingScreen() { return <div className="grid min-h-screen place-items-center bg-slate-50"><div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm"><span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600" />Verifying your account…</div></div>; }
-function SignInScreen({ error }: { error?: string }) {
-  const [register, setRegister] = useState(false);
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [formError, setFormError] = useState("");
-  const [notice, setNotice] = useState("");
-  const utils = trpc.useUtils();
-  const login = trpc.auth.login.useMutation({ onSuccess: () => utils.auth.me.invalidate() });
-  const signup = trpc.auth.register.useMutation({ onSuccess: async result => {
-    if (result.requiresEmailConfirmation) setNotice("Check your email for a confirmation link, then return here to sign in.");
-    else await utils.auth.me.invalidate();
-  } });
-  const pending = login.isPending || signup.isPending;
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault(); setFormError(""); setNotice("");
-    const onError = (cause: { message: string }) => setFormError(cause.message);
-    if (register) signup.mutate({ email, name, password }, { onError });
-    else login.mutate({ email, password }, { onError });
-  };
-  return <div className="min-h-screen bg-[#f7f8fb] px-4 py-12"><div className="mx-auto flex max-w-md flex-col items-center"><Brand /><section className="mt-10 w-full rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9"><p className="text-xs font-bold tracking-[.18em] text-indigo-600">STUDENT TEACHER E-PORTFOLIO</p><h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{register ? "Create your account." : "Welcome back."}</h1><p className="mt-2 text-sm leading-relaxed text-slate-500">Use your email and password. Portfolio access is granted only after an authorized administrator activates your account.</p><form className="mt-6 space-y-4" onSubmit={submit}>
-    {register && <label className="block space-y-1.5"><span className="text-sm font-medium text-slate-700">Full name</span><input required maxLength={120} autoComplete="name" value={name} onChange={e => setName(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm" /></label>}
-    <label className="block space-y-1.5"><span className="text-sm font-medium text-slate-700">Email</span><input required type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm" /></label>
-    <label className="block space-y-1.5"><span className="text-sm font-medium text-slate-700">Password</span><input required minLength={register ? 12 : 1} maxLength={128} type="password" autoComplete={register ? "new-password" : "current-password"} value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm" />{register && <span className="block text-xs text-slate-500">Use at least 12 characters.</span>}</label>
-    <button disabled={pending} className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-700 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-800 disabled:opacity-50"><ShieldCheck size={16} />{pending ? "Please wait…" : register ? "Create account" : "Sign in"}</button>
-    </form>{notice && <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}{(formError || error) && <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{formError || error}</p>}<button type="button" onClick={() => { setRegister(!register); setFormError(""); setNotice(""); }} className="mt-5 w-full text-sm font-medium text-indigo-700">{register ? "Already have an account? Sign in" : "New here? Create an account"}</button><div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">Creating an account does not grant a role. An institution administrator must issue an invitation to your email before you can access portfolio data.</div></section><p className="mt-5 text-center text-xs text-slate-400">Fictional training workspace · institution policies apply</p></div></div>;
-}
 
-function ActivationScreen({ user, onComplete }: { user: Access; onComplete: () => void }) {
+function ActivationScreen({ user, onComplete, onSignOut, signingOut }: { user: Access; onComplete: () => void; onSignOut: () => void; signingOut: boolean }) {
   const [token, setToken] = useState(new URLSearchParams(window.location.search).get("invite") ?? "");
   const [error, setError] = useState("");
   const redeem = trpc.auth.claimInvitation.useMutation({ onSuccess: onComplete });
-  return <div className="min-h-screen bg-[#f7f8fb] px-4 py-12"><div className="mx-auto flex max-w-lg flex-col items-center"><Brand /><section className="mt-10 w-full rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-50 text-amber-700"><ShieldCheck size={23} /></div><p className="mt-5 text-xs font-bold uppercase tracking-[.17em] text-amber-700">Application access locked</p><h1 className="mt-2 text-2xl font-semibold text-slate-900">Your account is not active yet.</h1><p className="mt-2 text-sm leading-relaxed text-slate-600">You’re signed in as <strong>{user.name || user.email || "your account"}</strong>, but no administrator-assigned role is active. Portfolio data remains inaccessible until an institution administrator issues and activates an invitation.</p>{user.email ? <p className="mt-3 text-xs text-slate-500">Invitations must be issued to this account email: <strong>{user.email}</strong></p> : <p className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">Your account does not have an email address available to match an invitation. Ask your administrator about the institution's account policy.</p>}<form className="mt-5 space-y-3" onSubmit={event => { event.preventDefault(); setError(""); redeem.mutate({ token: token.trim() }, { onError: cause => setError(cause.message) }); }}><label className="block space-y-1.5"><span className="text-sm font-medium text-slate-700">Administrator-issued invitation token</span><input className="w-full rounded-lg border border-slate-200 px-3 py-2.5 font-mono text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" value={token} onChange={event => setToken(event.target.value)} placeholder="Paste the one-time invitation token" autoComplete="off" /></label><button disabled={!user.email || token.trim().length < 20 || redeem.isPending} className="w-full rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-800 disabled:opacity-45">{redeem.isPending ? "Verifying invitation…" : "Redeem invitation"}</button></form>{error && <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}<div className="mt-5 border-t border-slate-100 pt-4 text-xs leading-relaxed text-slate-500"><p>The invitation fixes your institution and role; you cannot choose or change either. It is single-use, expires after seven days, and only works for the email address it was issued to. No portfolio records are shown on this page.</p></div><button onClick={() => { try { } catch {} window.location.reload(); }} className="mt-5 text-sm font-medium text-slate-600 hover:text-slate-900">Sign in as a different account</button></section></div></div>;
+  return (
+    <main className="min-h-screen bg-[#faf9f6] lg:grid lg:grid-cols-[minmax(0,1.02fr)_minmax(480px,.98fr)]">
+      <AuthAside />
+      <section className="flex min-h-screen flex-col px-5 py-6 sm:px-10 lg:px-12 xl:px-16">
+        <div className="lg:hidden"><Brand /></div>
+        <div className="mx-auto flex w-full max-w-[430px] flex-1 flex-col justify-center py-10">
+          <p className="text-[11px] font-bold uppercase tracking-[.2em] text-amber-700">Application access locked</p>
+          <h1 className="mt-2 text-[34px] font-semibold leading-tight tracking-[-0.045em] text-slate-950 sm:text-[38px]">One last step before you begin.</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">Your account is signed in, but your institution has not activated portfolio access yet. Redeem the invitation from your administrator to continue.</p>
+
+          <div className="mt-6 rounded-xl border border-slate-200 bg-white/75 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[.14em] text-slate-500">Signed in as</p>
+            <p className="mt-1.5 break-all text-sm font-semibold text-slate-900">{user.email || user.name || "Account email unavailable"}</p>
+            {!user.email && <p className="mt-2 text-xs leading-5 text-rose-700">An email address is required to match an invitation. Contact your institution administrator for help.</p>}
+          </div>
+
+          <form className="mt-6 space-y-4" onSubmit={event => { event.preventDefault(); setError(""); redeem.mutate({ token: token.trim() }, { onError: cause => setError(cause.message) }); }}>
+            <label className="block">
+              <span className="mb-2 block text-[13px] font-semibold text-slate-700">Invitation code</span>
+              <input required minLength={20} maxLength={256} disabled={!user.email || redeem.isPending} className="h-[50px] w-full rounded-xl border border-slate-200 bg-white px-4 font-mono text-sm tracking-wide text-slate-900 outline-none transition placeholder:font-sans placeholder:tracking-normal placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/70 disabled:bg-slate-100" value={token} onChange={event => setToken(event.target.value)} placeholder="Paste the code from your administrator" autoComplete="off" />
+              <span className="mt-2 block text-xs leading-5 text-slate-500">Your invitation is tied to your email and sets your institution and role. It can only be used once.</span>
+            </label>
+            {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-[13px] leading-5 text-rose-800">{error}</p>}
+            <button disabled={!user.email || token.trim().length < 20 || redeem.isPending} className="flex h-[52px] w-full items-center justify-center rounded-xl bg-indigo-700 px-4 text-sm font-semibold text-white shadow-[0_8px_18px_rgba(67,56,202,.18)] transition hover:bg-indigo-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-50">{redeem.isPending ? "Checking invitation…" : "Activate my account"}</button>
+          </form>
+
+          <p className="mt-5 border-l-2 border-amber-500 pl-3.5 text-xs leading-[1.6] text-slate-600">Don’t have an invitation? Ask your institution administrator to issue one for this email address.</p>
+          <button type="button" disabled={signingOut} onClick={onSignOut} className="mt-7 self-start text-sm font-semibold text-indigo-700 hover:text-indigo-900 disabled:opacity-60">{signingOut ? "Signing out…" : "Sign out and use another account"}</button>
+        </div>
+        <footer className="text-center text-[11px] text-slate-400 lg:text-right">© {new Date().getFullYear()} Teachfolio · Private by design</footer>
+      </section>
+    </main>
+  );
 }
 
 export default function App() {
@@ -75,13 +81,26 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [csrfReady, setCsrfReady] = useState(false);
   const [csrfError, setCsrfError] = useState("");
+  const [recoveryTokens, setRecoveryTokens] = useState<{ accessToken: string; refreshToken: string } | null>(null);
+  const [authCallbackError, setAuthCallbackError] = useState("");
   const me = trpc.auth.me.useQuery(undefined, { retry: false, refetchOnWindowFocus: true });
   const utils = trpc.useUtils();
+  const confirmSupabaseSession = trpc.auth.confirmSession.useMutation({ onSuccess: () => utils.auth.me.invalidate(), onError: error => setAuthCallbackError(error.message) });
   const logout = trpc.auth.logout.useMutation({ onSuccess: async () => { try { sessionStorage.removeItem("teachfolio-csrf"); } catch {} await utils.auth.me.invalidate(); } });
   const access = me.data as Access | null | undefined;
   const alerts = trpc.notifications.mine.useQuery(undefined, { enabled: Boolean(access?.activated), retry: false });
   const unread = alerts.data?.filter(note => !note.readAt).length ?? 0;
   const allowedNav = useMemo(() => navBase.filter(item => access?.roles.some(role => item.roles.includes(role))), [access?.roles]);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const accessToken = params.get("access_token");
+    const refreshToken = params.get("refresh_token");
+    const type = params.get("type");
+    if (!accessToken || !refreshToken || !type) return;
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    if (type === "recovery") setRecoveryTokens({ accessToken, refreshToken });
+    else confirmSupabaseSession.mutate({ accessToken, refreshToken });
+  }, []);
   useEffect(() => {
     let cancelled = false;
     if (!access?.id) { setCsrfReady(false); setCsrfError(""); return; }
@@ -99,10 +118,11 @@ export default function App() {
   }, [access?.id]);
   useEffect(() => { setMenuOpen(false); setSearch(""); }, [path]);
 
-  if (me.isLoading) return <LoadingScreen />;
-  if (me.error || access === null || access === undefined) return <SignInScreen error={me.error?.message === "Failed to fetch" ? "The application service could not be reached. Try again in a moment." : undefined} />;
+  if (recoveryTokens) return <PasswordRecoveryScreen tokens={recoveryTokens} onComplete={() => setRecoveryTokens(null)} />;
+  if (confirmSupabaseSession.isPending || me.isLoading) return <LoadingScreen />;
+  if (me.error || access === null || access === undefined) return <AuthExperience error={authCallbackError || (me.error?.message === "Failed to fetch" ? "The application service could not be reached. Try again in a moment." : undefined)} />;
   if (!csrfReady) return <div><LoadingScreen />{csrfError && <div className="fixed inset-x-4 bottom-5 mx-auto max-w-md rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 shadow-lg">{csrfError}<button onClick={() => window.location.reload()} className="ml-2 font-semibold underline">Retry</button></div>}</div>;
-  if (!access.activated) return <ActivationScreen user={access} onComplete={async () => { await utils.auth.me.invalidate(); }} />;
+  if (!access.activated) return <ActivationScreen user={access} onComplete={async () => { await utils.auth.me.invalidate(); }} onSignOut={() => logout.mutate()} signingOut={logout.isPending} />;
 
   const openCreate = (kind: Kind = "lesson") => { setEditing(null); setFormKind(kind); setFormOpen(true); };
   const openEdit = (entry: Entry) => { setEditing(entry); setFormKind(entry.kind); setFormOpen(true); };

@@ -31,9 +31,11 @@ async function startServer() {
   const requireCsrf = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     // Anonymous credential submissions have no session-bound token yet. Require
     // a same-origin browser request to prevent login CSRF.
-    if (req.path === "/auth.login" || req.path === "/auth.register") {
+    if (["/auth.login", "/auth.register", "/auth.confirmSession", "/auth.requestPasswordReset", "/auth.updatePassword"].includes(req.path)) {
       const origin = req.get("origin");
-      if (!origin || new URL(origin).host !== req.get("host")) {
+      let sameOrigin = false;
+      try { sameOrigin = Boolean(origin && req.get("host") && new URL(origin).host === req.get("host")); } catch {}
+      if (!sameOrigin) {
         res.status(403).json({ error: "Same-origin login request required." });
         return;
       }

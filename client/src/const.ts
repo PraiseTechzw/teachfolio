@@ -1,2 +1,2 @@
 export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
-export const startLogin = () => window.location.assign("/");
+export const goToSignIn = () => window.location.assign("/");

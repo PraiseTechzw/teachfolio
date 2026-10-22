@@ -24,20 +24,20 @@ describe("portfolio authorization policy", () => {
     expect(canDecideSubmission({ actorId: 8, ownerId: 4, institutionAllowed: true, assignedReviewer: true, roles: ["coordinator"] })).toBe(false);
     expect(canDecideSubmission({ actorId: 8, ownerId: 4, institutionAllowed: true, assignedReviewer: true, roles: ["institution_admin"] })).toBe(false);
   });
-  it("binds CSRF tokens to one authenticated OAuth identity and expiration", () => {
-    const token = issueCsrfToken("oauth-a", 1_000);
-    expect(verifyCsrfToken(token, "oauth-a", 1_100)).toBe(true);
-    expect(verifyCsrfToken(token, "oauth-b", 1_100)).toBe(false);
-    expect(verifyCsrfToken(token, "oauth-a", 4_700)).toBe(false);
-    expect(verifyCsrfToken(undefined, "oauth-a", 1_100)).toBe(false);
+  it("binds CSRF tokens to one authenticated Supabase identity and expiration", () => {
+    const token = issueCsrfToken("supabase-user-a", 1_000);
+    expect(verifyCsrfToken(token, "supabase-user-a", 1_100)).toBe(true);
+    expect(verifyCsrfToken(token, "supabase-user-b", 1_100)).toBe(false);
+    expect(verifyCsrfToken(token, "supabase-user-a", 4_700)).toBe(false);
+    expect(verifyCsrfToken(undefined, "supabase-user-a", 1_100)).toBe(false);
   });
 });
 
 describe("reserved demo identity policy", () => {
-  it("marks all seeded non-login OAuth identifiers as reserved", async () => {
+  it("marks all seeded non-login identities as reserved", async () => {
     const { DEMO_OPEN_ID_PREFIX, isReservedDemoIdentity } = await import("./authz-policy");
     expect(isReservedDemoIdentity(`${DEMO_OPEN_ID_PREFIX}student1`)).toBe(true);
-    expect(isReservedDemoIdentity("real-manus-oauth-identity")).toBe(false);
+    expect(isReservedDemoIdentity("real-supabase-user-id")).toBe(false);
   });
 });
 

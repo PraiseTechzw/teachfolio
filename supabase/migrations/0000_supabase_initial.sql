@@ -1,3 +1,21 @@
+CREATE TYPE "legacy_user_role" AS ENUM ('user', 'admin');
+--> statement-breakpoint
+CREATE TYPE "access_role" AS ENUM ('student_teacher', 'supervisor', 'lecturer', 'coordinator', 'institution_admin', 'platform_admin');
+--> statement-breakpoint
+CREATE TYPE "assignment_status" AS ENUM ('pending', 'active', 'suspended');
+--> statement-breakpoint
+CREATE TYPE "invite_role" AS ENUM ('student_teacher', 'supervisor', 'lecturer', 'coordinator', 'institution_admin');
+--> statement-breakpoint
+CREATE TYPE "placement_status" AS ENUM ('active', 'completed', 'upcoming');
+--> statement-breakpoint
+CREATE TYPE "entry_kind" AS ENUM ('scheme', 'lesson', 'reflection', 'evidence', 'observation', 'supporting_document', 'final_report');
+--> statement-breakpoint
+CREATE TYPE "requirement_category" AS ENUM ('scheme', 'lesson', 'reflection', 'evidence', 'observation', 'supporting_document', 'assessment', 'final_report');
+--> statement-breakpoint
+CREATE TYPE "entry_status" AS ENUM ('draft', 'submitted', 'under_review', 'revision_required', 'resubmitted', 'approved', 'rejected', 'archived');
+--> statement-breakpoint
+CREATE TYPE "review_decision" AS ENUM ('under_review', 'revision_required', 'approved', 'rejected');
+--> statement-breakpoint
 CREATE TABLE "access_assignments" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"userId" integer NOT NULL,
@@ -133,7 +151,7 @@ CREATE TABLE "submission_versions" (
 	"version" integer NOT NULL,
 	"snapshot" jsonb NOT NULL,
 	"status" varchar(40) NOT NULL,
-	"createdAt" timestamp with time zone DEFAULT now() NOT NULL
+	"submittedAt" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "users" (
@@ -193,3 +211,27 @@ CREATE INDEX "review_entry_idx" ON "reviews" USING btree ("entryId");--> stateme
 CREATE INDEX "review_tenant_idx" ON "reviews" USING btree ("institutionId");--> statement-breakpoint
 CREATE UNIQUE INDEX "submission_entry_version_unique" ON "submission_versions" USING btree ("entryId","version");--> statement-breakpoint
 CREATE INDEX "submission_tenant_idx" ON "submission_versions" USING btree ("institutionId");
+--> statement-breakpoint
+ALTER TABLE "users" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE "institutions" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE "access_assignments" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE "invitations" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE "placements" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE "portfolio_requirements" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE "portfolio_entries" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE "submission_versions" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE "evidence_files" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE "reviews" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE "notifications" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+ALTER TABLE "audit_logs" ENABLE ROW LEVEL SECURITY;

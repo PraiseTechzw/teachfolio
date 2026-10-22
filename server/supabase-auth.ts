@@ -48,6 +48,28 @@ export async function registerAccount(input: { email: string; name: string; pass
   return { requiresEmailConfirmation: !data.session, user: data.user };
 }
 
+export async function establishSupabaseSession(accessToken: string, refreshToken: string, req: Request, res: Response) {
+  const { data, error } = await authClient().auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+  if (error || !data.session || !data.user) throw new Error("The email confirmation or recovery link is invalid or expired.");
+  setAuthCookies(res, req, data.session);
+  return data.user;
+}
+
+export async function sendPasswordReset(email: string, redirectTo: string) {
+  const { error } = await authClient().auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo });
+  if (error) throw error;
+}
+
+export async function changePassword(accessToken: string, refreshToken: string, password: string, req: Request, res: Response) {
+  const client = authClient();
+  const { data: sessionData, error: sessionError } = await client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+  if (sessionError || !sessionData.session || !sessionData.user) throw new Error("The password reset link is invalid or expired.");
+  const { data, error } = await client.auth.updateUser({ password });
+  if (error || !data.user) throw new Error("The new password could not be saved.");
+  setAuthCookies(res, req, sessionData.session);
+  return data.user;
+}
+
 export async function signInAccount(email: string, password: string, req: Request, res: Response) {
   const { data, error } = await authClient().auth.signInWithPassword({
     email: email.trim().toLowerCase(), password,

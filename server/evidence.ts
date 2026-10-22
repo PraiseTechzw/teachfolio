@@ -53,7 +53,7 @@ export function registerEvidenceRoutes(app: Express) {
     } catch (error) {
       const status = (error as { status?: number })?.status;
       if (status === 413) return fail(res, 413, "Files are limited to 25 MiB.");
-      if ((error as { name?: string })?.name === "ForbiddenError") return fail(res, 401, "Sign in with Manus OAuth to continue.");
+      if ((error as { name?: string })?.name === "ForbiddenError") return fail(res, 401, "Sign in to continue.");
       console.error("[Evidence] upload failed:", error instanceof Error ? error.message : "unknown error");
       return fail(res, 500, "The upload could not be completed.");
     }

@@ -7,6 +7,8 @@ import * as db from "../db";
 import { REFRESH_COOKIE, refreshSupabaseSession, setAuthCookiesForRefresh, supabaseIdentity } from "../supabase-auth";
 
 class SDKServer {
+  private readonly requestUsers = new WeakMap<Request, Promise<AuthenticatedUser>>();
+
   private parseCookies(cookieHeader: string | undefined) {
     if (!cookieHeader) {
       return new Map<string, string>();
@@ -17,6 +19,14 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request, res?: Response): Promise<AuthenticatedUser> {
+    const existing = this.requestUsers.get(req);
+    if (existing) return existing;
+    const pending = this.resolveAuthenticatedRequest(req, res);
+    this.requestUsers.set(req, pending);
+    return pending;
+  }
+
+  private async resolveAuthenticatedRequest(req: Request, res?: Response): Promise<AuthenticatedUser> {
     const cookies = this.parseCookies(req.headers.cookie);
     let sessionToken = cookies.get(COOKIE_NAME);
     if (!sessionToken) {

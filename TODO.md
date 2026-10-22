@@ -1,6 +1,6 @@
 # TODO — Student Teacher E-Portfolio System
 
-Status key: `[ ]` not complete, `[x]` complete with evidence. Items preserve user-visible requirements; incomplete scope remains open.
+Status key: `[ ]` not complete, `[x]` complete with evidence. Items preserve user-visible requirements; incomplete scope remains open. The project now uses Supabase Auth, PostgreSQL, and private Storage as documented in README.md; legacy MySQL and Manus OAuth references below describe the original implementation and should be read as Supabase Auth/PostgreSQL equivalents.
 
 ## 1. Application foundation, identity, and authorization
 

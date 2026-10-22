@@ -21,7 +21,8 @@ function apiUrl(baseUrl: string, operation: string, key: string) {
 }
 
 function authHeaders(secret: string) {
-  return { Authorization: `Bearer ${secret}`, apikey: secret };
+  // Supabase publishable/secret API keys belong in `apikey`; they are not JWTs.
+  return { apikey: secret };
 }
 
 export async function storagePut(

@@ -1,4 +1,4 @@
-import { startLogin } from "@/const";
+import { goToSignIn } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { useCallback, useEffect, useMemo } from "react";
@@ -9,10 +9,7 @@ type UseAuthOptions = {
 };
 
 export function useAuth(options?: UseAuthOptions) {
-  // Login is started via startLogin() in the effect below, only when we actually
-  // navigate — never during render. startLogin() mints a one-time nonce + writes
-  // the state cookie, so calling it per render would overwrite the cookie and
-  // desync it from an in-flight login's `state`.
+  // Navigate to the app's sign-in screen only when authentication is required.
   const { redirectOnUnauthenticated = false, redirectPath } = options ?? {};
   const utils = trpc.useUtils();
 
@@ -49,7 +46,7 @@ export function useAuth(options?: UseAuthOptions) {
 
   const state = useMemo(() => {
     localStorage.setItem(
-      "manus-runtime-user-info",
+      "teachfolio-runtime-user-info",
       JSON.stringify(meQuery.data)
     );
     return {
@@ -73,11 +70,11 @@ export function useAuth(options?: UseAuthOptions) {
     if (typeof window === "undefined") return;
     if (redirectPath && window.location.pathname === redirectPath) return;
 
-    // Navigate at this moment only. startLogin() mints the nonce + cookie itself.
+    // Navigate only when authentication is required.
     if (redirectPath) {
       window.location.href = redirectPath;
     } else {
-      startLogin();
+      goToSignIn();
     }
   }, [
     redirectOnUnauthenticated,
