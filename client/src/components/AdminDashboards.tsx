@@ -1234,6 +1234,7 @@ export function PlacementManagementDashboard({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [message, setMessage] = useState("");
+  const [showEditor, setShowEditor] = useState(false);
   const save = trpc.admin.savePlacement.useMutation({
     onSuccess: async result => {
       await Promise.all([
@@ -1241,6 +1242,7 @@ export function PlacementManagementDashboard({
         utils.notifications.mine.invalidate(),
       ]);
       setEditingId(undefined);
+      setShowEditor(false);
       setForm(emptyPlacementForm);
       setMessage(
         editingId ? "Placement updated." : "Placement created and assigned."
@@ -1252,10 +1254,6 @@ export function PlacementManagementDashboard({
   const students = options.data?.students ?? [];
   const supervisors = options.data?.supervisors ?? [];
   const lecturers = options.data?.lecturers ?? [];
-  const activeCount = rows.filter(row => row.status === "active").length;
-  const unassignedCount = rows.filter(
-    row => !row.supervisorUserId || !row.lecturerUserId
-  ).length;
   const filtered = useMemo(
     () =>
       rows.filter(row => {
@@ -1290,6 +1288,7 @@ export function PlacementManagementDashboard({
 
   const beginEdit = (row: (typeof rows)[number]) => {
     setEditingId(row.id);
+    setShowEditor(true);
     setMessage("");
     setForm({
       studentUserId: String(row.studentUserId),
@@ -1308,9 +1307,11 @@ export function PlacementManagementDashboard({
       lecturerUserId: row.lecturerUserId ? String(row.lecturerUserId) : "",
       status: row.status,
     });
-    document
-      .getElementById("placement-editor")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.requestAnimationFrame(() =>
+      document
+        .getElementById("placement-editor")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" })
+    );
   };
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -1350,7 +1351,7 @@ export function PlacementManagementDashboard({
           <SectionHeading
             eyebrow="INSTITUTION ADMINISTRATION"
             title="Placement management"
-            description="Connect each student teacher with a school, teaching programme and assigned supervisor or lecturer. Only active users in this institution can be selected."
+            description="Manage school placements and reviewer assignments."
           />
         </div>
         <button
@@ -1358,9 +1359,13 @@ export function PlacementManagementDashboard({
           onClick={() => {
             setEditingId(undefined);
             setForm(emptyPlacementForm);
-            document
-              .getElementById("placement-editor")
-              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            setMessage("");
+            setShowEditor(true);
+            window.requestAnimationFrame(() =>
+              document
+                .getElementById("placement-editor")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            );
           }}
           className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
         >
@@ -1368,43 +1373,15 @@ export function PlacementManagementDashboard({
         </button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Metric
-          label="Placements"
-          value={placements.isLoading || placements.error ? "—" : rows.length}
-          detail="In this institution"
-          icon={MapPin}
-        />
-        <Metric
-          label="Active placements"
-          value={placements.isLoading || placements.error ? "—" : activeCount}
-          detail="Currently in teaching practice"
-          tone="emerald"
-          icon={CalendarDays}
-        />
-        <Metric
-          label="Assignments to complete"
-          value={
-            placements.isLoading || placements.error ? "—" : unassignedCount
-          }
-          detail="Missing a supervisor or lecturer"
-          tone="amber"
-          icon={Users}
-        />
-      </div>
-
       <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-semibold text-slate-900">
-                Placement directory
+                Placements
               </h2>
-              <StateBadge tone="blue">{filtered.length} shown</StateBadge>
+              {!placements.isLoading && !placements.error && <span className="text-xs text-slate-400">{filtered.length} {filtered.length === 1 ? "record" : "records"}</span>}
             </div>
-            <p className="mt-1 text-xs text-slate-500">
-              Student, school and reviewer records for this institution only.
-            </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="relative">
@@ -1446,17 +1423,15 @@ export function PlacementManagementDashboard({
             try again.
           </div>
         ) : !filtered.length ? (
-          <div className="rounded-xl border border-dashed border-slate-300 p-7 text-center">
+          <div className="rounded-xl border border-dashed border-slate-300 px-5 py-10 text-center">
             <MapPin className="mx-auto text-slate-400" size={22} />
             <p className="mt-2 text-sm font-semibold text-slate-700">
               {rows.length
                 ? "No matching placements"
                 : "No placements set up yet"}
             </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Create the student's placement and reviewer assignments to open
-              the review workflow.
-            </p>
+            <p className="mt-1 text-xs text-slate-500">Add a school, student, and review team to get started.</p>
+            {!rows.length && <button type="button" onClick={() => setShowEditor(true)} className="mt-4 inline-flex min-h-9 items-center gap-2 rounded-lg bg-indigo-600 px-3.5 text-xs font-semibold text-white hover:bg-indigo-700"><Plus size={14} /> Create placement</button>}
           </div>
         ) : (
           <div className="space-y-2">
@@ -1535,34 +1510,27 @@ export function PlacementManagementDashboard({
         )}
       </section>
 
-      <form
+      {showEditor && <form
         id="placement-editor"
         onSubmit={submit}
         className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-6"
       >
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
-              Placement record
-            </p>
             <h2 className="mt-1 font-semibold text-slate-900">
               {editingId ? "Edit placement" : "Create placement"}
             </h2>
-            <p className="mt-1 text-xs text-slate-500">
-              New assignments notify the student and assigned reviewers.
-            </p>
           </div>
-          {editingId && (
-            <ActionButton
-              onClick={() => {
-                setEditingId(undefined);
-                setForm(emptyPlacementForm);
-                setMessage("");
-              }}
-            >
-              <X size={14} /> Cancel edit
-            </ActionButton>
-          )}
+          <ActionButton
+            onClick={() => {
+              setEditingId(undefined);
+              setForm(emptyPlacementForm);
+              setMessage("");
+              setShowEditor(false);
+            }}
+          >
+            <X size={14} /> Cancel
+          </ActionButton>
         </div>
         {options.error ? (
           <div
@@ -1788,7 +1756,7 @@ export function PlacementManagementDashboard({
             </p>
           )}
         </div>
-      </form>
+      </form>}
     </div>
   );
 }
