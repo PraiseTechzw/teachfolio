@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Building2,
+  CalendarDays,
   Check,
   Clock3,
   Pause,
+  MapPin,
+  Pencil,
   Play,
   Plus,
   Search,
+  Save,
   ShieldCheck,
   Users,
+  X,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
@@ -68,27 +73,34 @@ function Metric({
   value,
   detail,
   tone = "indigo",
+  icon: Icon = Building2,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   detail: string;
   tone?: "indigo" | "emerald" | "amber" | "slate";
+  icon?: typeof Building2;
 }) {
   const color = {
-    indigo: "text-indigo-700 bg-indigo-50",
+    indigo: "text-indigo-600 bg-indigo-50",
     emerald: "text-emerald-700 bg-emerald-50",
-    amber: "text-amber-800 bg-amber-50",
-    slate: "text-slate-700 bg-slate-100",
+    amber: "text-amber-700 bg-amber-50",
+    slate: "text-slate-600 bg-slate-100",
   }[tone];
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <p className="text-xs font-semibold text-slate-500">{label}</p>
-      <p
-        className={`mt-2 inline-flex min-w-10 justify-center rounded-lg px-2.5 py-1 text-2xl font-semibold ${color}`}
-      >
-        {value}
-      </p>
-      <p className="mt-2 text-xs text-slate-500">{detail}</p>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-slate-500">{label}</p>
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+            {value}
+          </p>
+        </div>
+        <span className={`rounded-xl p-3 ${color}`}>
+          <Icon size={19} />
+        </span>
+      </div>
+      <p className="mt-3 text-xs text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -672,6 +684,9 @@ export function PlatformInstitutionDashboard({
   const selected = rows.find(row => row.id === selectedId);
   const invitationsData = (invitations.data ?? []) as InvitationRow[];
   const activeCount = rows.filter(row => row.active).length;
+  const pendingCount = invitationsData.filter(
+    row => row.status === "pending_activation"
+  ).length;
 
   if (!allowed)
     return (
@@ -727,34 +742,81 @@ export function PlatformInstitutionDashboard({
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        eyebrow="PLATFORM ADMINISTRATION"
-        title="Institution administration"
-        description="Create and maintain institution tenants. Deactivating a tenant blocks application access for its users until the tenant is reactivated; every change is recorded."
-      />
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <SectionHeading
+            eyebrow="PLATFORM ADMINISTRATION"
+            title="Institution administration"
+            description="Create and maintain institution workspaces, establish their first administrator, and control tenant access. Changes are recorded in the platform audit log."
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            document
+              .getElementById("create-institution")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+        >
+          <Plus size={16} />
+          Create institution
+        </button>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric
           label="Institutions"
-          value={rows.length}
-          detail="Tenants returned by the platform administration API"
+          value={
+            institutions.isLoading || institutions.error ? "—" : rows.length
+          }
+          detail="Institution workspaces on the platform"
+          icon={Building2}
         />
         <Metric
           label="Active"
-          value={activeCount}
-          detail="Accounts in inactive tenants remain denied"
+          value={
+            institutions.isLoading || institutions.error ? "—" : activeCount
+          }
+          detail="Available to assigned institution users"
           tone="emerald"
+          icon={Check}
         />
         <Metric
           label="Inactive"
-          value={rows.length - activeCount}
-          detail="Can be restored by a platform administrator"
+          value={
+            institutions.isLoading || institutions.error
+              ? "—"
+              : rows.length - activeCount
+          }
+          detail="Access blocked until reactivated"
           tone="slate"
+          icon={Pause}
+        />
+        <Metric
+          label="Pending invitations"
+          value={
+            selectedId === undefined ||
+            invitations.isLoading ||
+            invitations.error
+              ? "—"
+              : pendingCount
+          }
+          detail={
+            selected
+              ? `Awaiting activation · ${selected.name}`
+              : "Select an institution to review"
+          }
+          tone="amber"
+          icon={Clock3}
         />
       </div>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="font-semibold">Institution directory</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-semibold">Institution directory</h2>
+              <StateBadge tone="blue">{filtered.length} shown</StateBadge>
+            </div>
             <p className="mt-1 text-xs text-slate-500">
               Platform-wide tenant records. Institution administrators cannot
               access this directory.
@@ -795,28 +857,62 @@ export function PlatformInstitutionDashboard({
             <p className="mt-1 text-xs text-slate-500">
               Create a tenant below or adjust the search.
             </p>
+            {!rows.length && (
+              <button
+                type="button"
+                onClick={() =>
+                  document
+                    .getElementById("create-institution")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+                className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800"
+              >
+                <Plus size={15} /> Create an institution
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
             {filtered.map(row => (
               <article
                 key={row.id}
-                className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-[minmax(0,1fr)_130px_180px] sm:items-center"
+                className={`grid gap-3 rounded-xl border p-3 transition-colors sm:grid-cols-[minmax(0,1fr)_100px_130px_180px] sm:items-center ${selectedId === row.id ? "border-indigo-200 bg-indigo-50/40" : "border-slate-200"}`}
               >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900">
-                    {row.name}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {row.code} · ID {row.id} · created{" "}
-                    {dateLabel(row.createdAt)}
-                    {row.isDemo ? " · reserved demo tenant" : ""}
-                  </p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-indigo-600 ring-1 ring-slate-200">
+                    <Building2 size={18} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {row.name}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-slate-500">
+                      {row.code} · ID {row.id} · created{" "}
+                      {dateLabel(row.createdAt)}
+                      {row.isDemo ? " · reserved demo tenant" : ""}
+                    </p>
+                  </div>
                 </div>
                 <div>
                   <StateBadge tone={row.active ? "emerald" : "slate"}>
                     {row.active ? "Active" : "Inactive"}
                   </StateBadge>
+                </div>
+                <div className="sm:text-right">
+                  <ActionButton
+                    onClick={() => {
+                      setSelectedId(row.id);
+                      setToken("");
+                      document
+                        .getElementById("bootstrap-admin")
+                        ?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "center",
+                        });
+                    }}
+                  >
+                    {selectedId === row.id ? "Selected" : "Manage access"}
+                  </ActionButton>
                 </div>
                 <div className="sm:text-right">
                   <ActionButton
@@ -853,6 +949,7 @@ export function PlatformInstitutionDashboard({
       <section className="grid gap-5 xl:grid-cols-2">
         <form
           onSubmit={createTenant}
+          id="create-institution"
           className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5"
         >
           <div className="flex items-center gap-2">
@@ -907,6 +1004,7 @@ export function PlatformInstitutionDashboard({
         </form>
         <form
           onSubmit={issueInstitutionAdminInvite}
+          id="bootstrap-admin"
           className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5"
         >
           <div className="flex items-center gap-2">
@@ -937,6 +1035,16 @@ export function PlatformInstitutionDashboard({
               ))}
             </select>
           </label>
+          {selected && (
+            <div
+              className={`mt-3 rounded-xl border px-3 py-2.5 text-xs leading-relaxed ${selected.active ? "border-indigo-100 bg-indigo-50/70 text-indigo-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}
+            >
+              <span className="font-semibold">{selected.name}</span>
+              {selected.active
+                ? " is active and can receive its first administrator invitation."
+                : " is inactive. Reactivate it before issuing an administrator invitation."}
+            </div>
+          )}
           <label className="mt-3 block text-xs font-semibold text-slate-600">
             Institution email
             <input

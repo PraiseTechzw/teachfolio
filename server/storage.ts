@@ -1,4 +1,5 @@
 import { ENV } from "./_core/env";
+import { Readable } from "node:stream";
 
 function storageConfig() {
   const baseUrl = ENV.supabaseUrl.replace(/\/+$/, "");
@@ -27,21 +28,38 @@ function authHeaders(secret: string) {
 
 export async function storagePut(
   relKey: string,
-  data: Buffer | Uint8Array | string,
+  data: Buffer | Uint8Array | string | Readable,
   contentType = "application/octet-stream",
+  contentLength?: number,
 ): Promise<{ key: string; url: string }> {
   const config = storageConfig();
   const key = encodedObjectPath(relKey);
+  const streaming = data instanceof Readable;
+  const headers: Record<string, string> = { ...authHeaders(config.secret), "Content-Type": contentType, "x-upsert": "false" };
+  if (streaming && contentLength !== undefined) headers["Content-Length"] = String(contentLength);
   const response = await fetch(apiUrl(config.baseUrl, "", key), {
     method: "POST",
-    headers: { ...authHeaders(config.secret), "Content-Type": contentType, "x-upsert": "false" },
-    body: typeof data === "string" ? data : new Uint8Array(data),
-  });
+    headers,
+    body: typeof data === "string" ? data : streaming ? data as unknown as BodyInit : new Uint8Array(data),
+    ...(streaming ? { duplex: "half" } : {}),
+  } as RequestInit & { duplex?: "half" });
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     throw new Error(`Supabase Storage upload failed (${response.status}): ${detail.slice(0, 300)}`);
   }
   return { key, url: key };
+}
+
+export async function storageDelete(relKey: string): Promise<void> {
+  const config = storageConfig();
+  const key = encodedObjectPath(relKey);
+  const response = await fetch(apiUrl(config.baseUrl, "", key), {
+    method: "DELETE",
+    headers: authHeaders(config.secret),
+  });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Supabase Storage delete failed (${response.status}).`);
+  }
 }
 
 export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {

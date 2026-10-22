@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { and, asc, count, desc, eq, inArray, like, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import {
   accessAssignments,
   auditLogs,
@@ -19,6 +19,7 @@ import {
 } from "../drizzle/schema";
 import * as db from "./db";
 import { applicationProcedure, requireRoles } from "./authz";
+import { csvCell } from "./csv";
 import {
   canAccessPortfolioRecord,
   canChangeAssignmentStatus,
@@ -57,6 +58,35 @@ const kindSchema = z.enum([
   "final_report",
 ]);
 const decisionSchema = z.enum(["revision_required", "approved", "rejected"]);
+const placementInput = z.object({
+  id: z.number().int().positive().optional(),
+  studentUserId: z.number().int().positive(),
+  schoolName: z.string().trim().min(2).max(220),
+  schoolLocation: z.string().trim().min(2).max(220),
+  programme: z.string().trim().min(2).max(180),
+  cohort: z.string().trim().min(1).max(100),
+  studentNumber: z.string().trim().min(1).max(80),
+  subject: z.string().trim().min(2).max(140),
+  classes: z.array(z.string().trim().min(1).max(100)).min(1).max(30),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  supervisorUserId: z.number().int().positive().nullable(),
+  lecturerUserId: z.number().int().positive().nullable(),
+  status: z.enum(["active", "completed", "upcoming"]),
+}).superRefine((input, context) => {
+  const isDate = (value: string) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+  if (!isDate(input.startDate) || !isDate(input.endDate)) {
+    context.addIssue({ code: "custom", message: "Placement dates must be valid calendar dates." });
+  } else if (input.startDate > input.endDate) {
+    context.addIssue({ code: "custom", message: "The placement end date must be on or after its start date." });
+  }
+  if (new Set(input.classes.map(value => value.toLowerCase())).size !== input.classes.length) {
+    context.addIssue({ code: "custom", message: "Class names must be unique." });
+  }
+});
 const entrySelect = {
   id: portfolioEntries.id,
   institutionId: portfolioEntries.institutionId,
@@ -1177,6 +1207,203 @@ const appRouter = router({
       }),
   }),
   admin: router({
+    placementOptions: requireRoles("coordinator", "institution_admin").query(
+      async ({ ctx }) => {
+        const tenant = ctx.appAccess.institutionId;
+        if (tenant === null) throw new TRPCError({ code: "FORBIDDEN" });
+        const database = await db.getDb();
+        if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+        const rows = await database
+          .select({
+            userId: accessAssignments.userId,
+            role: accessAssignments.role,
+            name: users.name,
+            email: users.email,
+          })
+          .from(accessAssignments)
+          .innerJoin(users, eq(accessAssignments.userId, users.id))
+          .where(
+            and(
+              eq(accessAssignments.institutionId, tenant),
+              eq(accessAssignments.status, "active"),
+              inArray(accessAssignments.role, [
+                "student_teacher",
+                "supervisor",
+                "lecturer",
+              ])
+            )
+          )
+          .orderBy(users.name);
+        return {
+          students: rows.filter(row => row.role === "student_teacher"),
+          supervisors: rows.filter(row => row.role === "supervisor"),
+          lecturers: rows.filter(row => row.role === "lecturer"),
+        };
+      }
+    ),
+    placements: requireRoles("coordinator", "institution_admin").query(
+      async ({ ctx }) => {
+        const tenant = ctx.appAccess.institutionId;
+        if (tenant === null) throw new TRPCError({ code: "FORBIDDEN" });
+        const database = await db.getDb();
+        if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+        const rows = await database
+          .select()
+          .from(placements)
+          .where(eq(placements.institutionId, tenant))
+          .orderBy(desc(placements.startDate), desc(placements.id))
+          .limit(1000);
+        const ids = [...new Set(rows.flatMap(row => [
+          row.studentUserId,
+          row.supervisorUserId,
+          row.lecturerUserId,
+        ]).filter((id): id is number => id !== null))];
+        const people = ids.length
+          ? await database
+              .select({ id: users.id, name: users.name, email: users.email })
+              .from(users)
+              .where(inArray(users.id, ids))
+          : [];
+        const byId = new Map(people.map(person => [person.id, person]));
+        return rows.map(row => ({
+          ...row,
+          studentName: byId.get(row.studentUserId)?.name ?? "Student teacher",
+          studentEmail: byId.get(row.studentUserId)?.email ?? "",
+          supervisorName: row.supervisorUserId
+            ? byId.get(row.supervisorUserId)?.name ?? "Supervisor"
+            : null,
+          lecturerName: row.lecturerUserId
+            ? byId.get(row.lecturerUserId)?.name ?? "Lecturer"
+            : null,
+        }));
+      }
+    ),
+    savePlacement: requireRoles("coordinator", "institution_admin")
+      .input(placementInput)
+      .mutation(async ({ ctx, input }) => {
+        const tenant = ctx.appAccess.institutionId;
+        if (tenant === null) throw new TRPCError({ code: "FORBIDDEN" });
+        const database = await db.getDb();
+        if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+
+        const verifyAssignment = async (
+          userId: number | null,
+          role: "student_teacher" | "supervisor" | "lecturer"
+        ) => {
+          if (userId === null && role !== "student_teacher") return;
+          if (userId === null) throw new TRPCError({ code: "BAD_REQUEST" });
+          const found = await database
+            .select({ id: accessAssignments.id })
+            .from(accessAssignments)
+            .where(
+              and(
+                eq(accessAssignments.userId, userId),
+                eq(accessAssignments.institutionId, tenant),
+                eq(accessAssignments.role, role),
+                eq(accessAssignments.status, "active")
+              )
+            )
+            .limit(1);
+          if (!found.length)
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Choose an active ${role.replaceAll("_", " ")} assigned to this institution.`,
+            });
+        };
+        await verifyAssignment(input.studentUserId, "student_teacher");
+        await verifyAssignment(input.supervisorUserId, "supervisor");
+        await verifyAssignment(input.lecturerUserId, "lecturer");
+
+        return database.transaction(async tx => {
+          // Serialize writes for a student so two coordinators cannot create
+          // duplicate active placement rows at the same time.
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(${tenant}, ${input.studentUserId})`
+          );
+          const matching = await tx
+            .select()
+            .from(placements)
+            .where(
+              and(
+                eq(placements.institutionId, tenant),
+                eq(placements.studentUserId, input.studentUserId)
+              )
+            );
+          const existing = input.id
+            ? matching.find(row => row.id === input.id)
+            : undefined;
+          if (input.id && !existing)
+            throw new TRPCError({ code: "NOT_FOUND", message: "Placement not found in this institution." });
+          if (matching.some(row => row.id !== input.id))
+            throw new TRPCError({ code: "CONFLICT", message: "This student already has a placement. Edit the existing placement instead." });
+
+          const values = {
+            institutionId: tenant,
+            studentUserId: input.studentUserId,
+            schoolName: input.schoolName,
+            schoolLocation: input.schoolLocation,
+            programme: input.programme,
+            cohort: input.cohort,
+            studentNumber: input.studentNumber,
+            subject: input.subject,
+            classes: input.classes,
+            startDate: input.startDate,
+            endDate: input.endDate,
+            supervisorUserId: input.supervisorUserId,
+            lecturerUserId: input.lecturerUserId,
+            status: input.status,
+          };
+          const changed = !existing || Object.entries(values).some(([key, value]) =>
+            JSON.stringify(existing[key as keyof typeof existing]) !== JSON.stringify(value)
+          );
+          let placementId: number;
+          if (existing) {
+            placementId = existing.id;
+            if (changed)
+              await tx.update(placements).set(values).where(
+                and(eq(placements.id, existing.id), eq(placements.institutionId, tenant))
+              );
+          } else {
+            const inserted = await tx.insert(placements).values(values).returning({ id: placements.id });
+            placementId = inserted[0]!.id;
+          }
+          if (changed) {
+            const recipients = new Map<number, { type: string; message: string; href: string }>();
+            recipients.set(input.studentUserId, {
+              type: "placement",
+              message: `Your teaching-practice placement at ${input.schoolName} has been ${existing ? "updated" : "assigned"}.`,
+              href: "/placement",
+            });
+            for (const [reviewerId, role] of [
+              [input.supervisorUserId, "supervisor"],
+              [input.lecturerUserId, "lecturer"],
+            ] as const) {
+              if (!reviewerId || reviewerId === input.studentUserId) continue;
+              recipients.set(reviewerId, {
+                type: "placement_assignment",
+                message: `You have been assigned as ${role} for ${input.studentUserId}'s teaching-practice placement at ${input.schoolName}.`,
+                href: "/reviews",
+              });
+            }
+            await tx.insert(notifications).values(
+              [...recipients].map(([userId, notification]) => ({
+                institutionId: tenant,
+                userId,
+                ...notification,
+              }))
+            );
+            await tx.insert(auditLogs).values({
+              institutionId: tenant,
+              actorUserId: ctx.user.id,
+              action: existing ? "placement_updated" : "placement_created",
+              targetType: "placement",
+              targetId: String(placementId),
+              detail: `Student ${input.studentUserId}; school ${input.schoolName}; supervisor ${input.supervisorUserId ?? "unassigned"}; lecturer ${input.lecturerUserId ?? "unassigned"}.`,
+            });
+          }
+          return { id: placementId, success: true };
+        });
+      }),
     requirements: requireRoles("coordinator", "institution_admin").query(
       async ({ ctx }) => {
         if (ctx.appAccess.institutionId === null)
@@ -1620,8 +1847,6 @@ const appRouter = router({
           .from(portfolioEntries)
           .where(where)
           .orderBy(desc(portfolioEntries.updatedAt));
-        const quote = (value: unknown) =>
-          `"${String(value ?? "").replaceAll('"', '""')}"`;
         return [
           "id,title,category,subject,class,status,version,updatedAt",
           ...rows.map(row =>
@@ -1635,7 +1860,7 @@ const appRouter = router({
               row.version,
               row.updatedAt.toISOString(),
             ]
-              .map(quote)
+              .map(csvCell)
               .join(",")
           ),
         ].join("\n");

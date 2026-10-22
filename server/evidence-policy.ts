@@ -37,11 +37,10 @@ function matchesSignature(mime: string, signature: Uint8Array) {
   return false;
 }
 
-export function validateEvidenceUpload(input: {
+export function validateEvidenceMetadata(input: {
   fileName: string;
   mimeType: string;
   byteSize: number;
-  signature: Uint8Array;
 }): string | null {
   const fileName = input.fileName.trim();
   const mime = input.mimeType.toLowerCase();
@@ -52,9 +51,28 @@ export function validateEvidenceUpload(input: {
     return "Choose a non-empty file.";
   if (input.byteSize > MAX_EVIDENCE_BYTES)
     return "Files are limited to 25 MiB.";
-  if (!matchesSignature(mime, input.signature))
+  return null;
+}
+
+export function validateEvidenceSignature(
+  mimeType: string,
+  signature: Uint8Array
+): string | null {
+  if (!matchesSignature(mimeType.toLowerCase(), signature))
     return "The file contents do not match the selected file type.";
   return null;
+}
+
+export function validateEvidenceUpload(input: {
+  fileName: string;
+  mimeType: string;
+  byteSize: number;
+  signature: Uint8Array;
+}): string | null {
+  return (
+    validateEvidenceMetadata(input) ??
+    validateEvidenceSignature(input.mimeType, input.signature)
+  );
 }
 
 export function evidenceIdsFromSnapshot(snapshot: unknown): number[] {
@@ -83,5 +101,38 @@ export function evidenceAppearsInAnySnapshot(
   if (!Number.isSafeInteger(fileId) || fileId < 1) return false;
   return snapshots.some(snapshot =>
     evidenceIdsFromSnapshot(snapshot).includes(fileId)
+  );
+}
+
+export function canAccessEvidenceFile(input: {
+  actorId: number;
+  institutionId: number | null;
+  fileInstitutionId: number;
+  ownerId: number;
+  uploaderUserId: number;
+  roles: readonly string[];
+  assignedReviewer: boolean;
+  appearsInSubmittedHistory: boolean;
+}) {
+  // Platform administrators manage tenants, not student evidence. Evidence
+  // access always requires an explicit institution assignment.
+  if (
+    input.institutionId === null ||
+    input.institutionId !== input.fileInstitutionId
+  )
+    return false;
+  const privileged = input.roles.some(role =>
+    ["institution_admin", "coordinator"].includes(role)
+  );
+  if (privileged) return true;
+  const owner =
+    input.roles.includes("student_teacher") &&
+    input.actorId === input.ownerId &&
+    input.actorId === input.uploaderUserId;
+  if (owner) return true;
+  return (
+    input.assignedReviewer &&
+    input.appearsInSubmittedHistory &&
+    input.roles.some(role => ["supervisor", "lecturer"].includes(role))
   );
 }

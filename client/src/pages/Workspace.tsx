@@ -627,20 +627,43 @@ export default function Workspace({
                 </p>
                 <div className="mt-3 divide-y divide-slate-100">
                   {visibleFiles.map(file => (
-                    <button
-                      type="button"
-                      className="flex w-full items-center justify-between gap-3 py-3 text-left text-sm hover:text-indigo-700"
-                      key={file.id}
-                      onClick={() => void openEvidenceFile(file.id)}
-                    >
-                      <span>
-                        {file.fileName}
-                        <span className="ml-2 text-xs text-slate-500">
-                          {(file.byteSize / 1024 / 1024).toFixed(1)} MiB
+                    <div key={file.id} className="py-3">
+                      {file.mimeType.startsWith("image/") && (
+                        <img
+                          src={`/api/evidence/${file.id}/download`}
+                          alt={`Preview of ${file.fileName}`}
+                          loading="lazy"
+                          className="mb-3 max-h-80 max-w-full rounded-lg border border-slate-200 object-contain"
+                        />
+                      )}
+                      {file.mimeType === "video/mp4" && (
+                        <video
+                          controls
+                          preload="metadata"
+                          aria-label={`Preview of ${file.fileName}`}
+                          className="mb-3 max-h-96 w-full rounded-lg bg-slate-950"
+                        >
+                          <source
+                            src={`/api/evidence/${file.id}/download`}
+                            type="video/mp4"
+                          />
+                          Your browser cannot play this MP4 video.
+                        </video>
+                      )}
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-3 text-left text-sm hover:text-indigo-700"
+                        onClick={() => void openEvidenceFile(file.id)}
+                      >
+                        <span>
+                          {file.fileName}
+                          <span className="ml-2 text-xs text-slate-500">
+                            {(file.byteSize / 1024 / 1024).toFixed(1)} MiB
+                          </span>
                         </span>
-                      </span>
-                      <ArrowDownToLine size={15} />
-                    </button>
+                        <ArrowDownToLine size={15} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -1285,21 +1308,71 @@ export default function Workspace({
       ["submitted", "resubmitted", "under_review"].includes(entry.status)
     ).length,
     revisions: entries.filter(
-      entry => entry.userId === user.id && entry.status === "revision_required"
+      entry =>
+        (!isStudent || entry.userId === user.id) &&
+        entry.status === "revision_required"
     ).length,
     approved: entries.filter(
-      entry => entry.userId === user.id && entry.status === "approved"
+      entry =>
+        (isStudent ? entry.userId === user.id : true) &&
+        entry.status === "approved"
     ).length,
   };
   const recent = entries
     .filter(entry => (isStudent ? entry.userId === user.id : true))
     .slice(0, 6);
+  const requirements = required.map(requirement => {
+    const approved = entries.filter(
+      entry =>
+        entry.kind === requirement.category && entry.status === "approved"
+    ).length;
+    return {
+      ...requirement,
+      approved: Math.min(requirement.requiredCount, approved),
+      percent: requirement.requiredCount
+        ? Math.min(
+            100,
+            Math.round((approved / requirement.requiredCount) * 100)
+          )
+        : 100,
+    };
+  });
+  const statusBreakdown = [
+    { key: "approved", label: "Approved", color: "bg-emerald-500" },
+    { key: "under_review", label: "Under review", color: "bg-amber-500" },
+    { key: "submitted", label: "Submitted", color: "bg-blue-500" },
+    { key: "resubmitted", label: "Resubmitted", color: "bg-violet-500" },
+    {
+      key: "revision_required",
+      label: "Revision required",
+      color: "bg-rose-500",
+    },
+    { key: "draft", label: "Draft", color: "bg-slate-400" },
+    { key: "rejected", label: "Rejected", color: "bg-red-700" },
+    { key: "archived", label: "Archived", color: "bg-slate-300" },
+  ].map(status => ({
+    ...status,
+    count: entries.filter(entry => entry.status === status.key).length,
+  }));
+  const statusTotal = statusBreakdown.reduce(
+    (sum, status) => sum + status.count,
+    0
+  );
+  const isInstitutionScoped = user.institutionId !== null;
   return (
     <>
       <PageTitle
-        eyebrow="TEACHING PRACTICE · 2026"
+        eyebrow={
+          isStudent
+            ? "TEACHING PRACTICE · OVERVIEW"
+            : "INSTITUTION WORKSPACE · OVERVIEW"
+        }
         title={`Good to see you${user.name ? `, ${user.name.split(" ")[0]}` : ""}`}
-        description="Your placement work, reviewer feedback and next actions in one place."
+        description={
+          isStudent
+            ? "Track your portfolio requirements, feedback and placement work."
+            : "Monitor authorized portfolio activity and move review work forward."
+        }
         action={
           isStudent ? (
             <Button kind="primary" onClick={() => onCreate("lesson")}>
@@ -1318,226 +1391,497 @@ export default function Workspace({
         />
       ) : (
         <>
-          <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-sky-950">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-white text-sky-700">
-              <GraduationCap size={17} />
-            </span>
-            <span className="font-semibold">
-              Institution teaching-practice workspace
-            </span>
-            <span className="text-xs text-sky-800">
-              Records are scoped by your active assignment.
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600">
+                <GraduationCap size={19} />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-900">
+                  {overview.data?.tenantName ?? "Teaching-practice workspace"}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {isStudent
+                    ? "Your placement and portfolio"
+                    : "Institution portfolio and review activity"}
+                </p>
+              </div>
+            </div>
+            <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+              {isInstitutionScoped
+                ? "Authorized workspace"
+                : "Platform administration"}
             </span>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              [
-                "Required portfolio",
-                `${completion}%`,
-                `${approvedRequired} of ${requiredTotal} required items approved`,
-                "text-indigo-700",
-                "bg-indigo-50",
-              ],
-              [
-                "Drafts",
-                counts.drafts,
-                "Your saved private work",
-                "text-slate-700",
-                "bg-slate-100",
-              ],
-              [
-                "Awaiting review",
-                counts.review,
-                "Submitted versions",
-                "text-amber-800",
-                "bg-amber-50",
-              ],
-              [
-                "Revision required",
-                counts.revisions,
-                `${counts.approved} approved · ${counts.revisions} need attention`,
-                "text-rose-700",
-                "bg-rose-50",
-              ],
-            ].map(([label, value, detail, color, background]) => {
-              const StatIcon =
-                label === "Required portfolio"
-                  ? ShieldCheck
-                  : label === "Drafts"
-                    ? FileText
-                    : label === "Awaiting review"
-                      ? Clock3
-                      : MessageSquareText;
-              return (
-                <div
-                  key={String(label)}
-                  className="rounded-2xl border border-slate-200 bg-white p-5"
+          {isPlatformAdmin && !isInstitutionScoped ? (
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+              <div className="max-w-2xl">
+                <p className="text-xs font-semibold uppercase tracking-[.12em] text-indigo-600">
+                  Platform administration
+                </p>
+                <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
+                  Manage institution workspaces
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Portfolio and placement reporting is kept within each
+                  institution’s authorized workspace. Create an institution or
+                  manage its administrator access to get started.
+                </p>
+                <Button
+                  kind="primary"
+                  onClick={() => onNavigate("/admin/institutions")}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-medium text-slate-500">
-                        {label}
-                      </p>
-                      <p
-                        className={`mt-3 text-[30px] font-semibold leading-none tracking-tight ${color}`}
-                      >
-                        {value}
+                  Open institution onboarding <ArrowRight size={15} />
+                </Button>
+              </div>
+            </section>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  [
+                    isStudent ? "Portfolio completion" : "Active requirements",
+                    isStudent ? `${completion}%` : required.length,
+                    isStudent
+                      ? `${approvedRequired} of ${requiredTotal} required items approved`
+                      : "Required categories configured",
+                    "text-indigo-700",
+                    "bg-indigo-50",
+                  ],
+                  [
+                    isStudent ? "My drafts" : "Portfolio records",
+                    isStudent ? counts.drafts : entries.length,
+                    isStudent
+                      ? "Saved private work"
+                      : "Authorized records in this view",
+                    "text-slate-700",
+                    "bg-slate-100",
+                  ],
+                  [
+                    isStudent ? "Awaiting review" : "In review",
+                    counts.review,
+                    "Submitted versions",
+                    "text-amber-800",
+                    "bg-amber-50",
+                  ],
+                  [
+                    "Revision required",
+                    counts.revisions,
+                    isStudent
+                      ? `${counts.approved} approved · ${counts.revisions} need attention`
+                      : "Records returned for revision in this view",
+                    "text-rose-700",
+                    "bg-rose-50",
+                  ],
+                ].map(([label, value, detail, color, background], index) => {
+                  const StatIcon = [
+                    ShieldCheck,
+                    FileText,
+                    Clock3,
+                    MessageSquareText,
+                  ][index];
+                  const statColor =
+                    index === 3 && !isStudent ? "text-emerald-700" : color;
+                  const statBackground =
+                    index === 3 && !isStudent ? "bg-emerald-50" : background;
+                  return (
+                    <div
+                      key={String(label)}
+                      className="rounded-2xl border border-slate-200 bg-white p-5"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-medium text-slate-500">
+                            {label}
+                          </p>
+                          <p
+                            className={`mt-3 text-[30px] font-semibold leading-none tracking-tight ${statColor}`}
+                          >
+                            {value}
+                          </p>
+                        </div>
+                        <span className={`rounded-xl p-2.5 ${statBackground}`}>
+                          <StatIcon size={19} className={statColor as string} />
+                        </span>
+                      </div>
+                      <p className="mt-3 text-xs leading-5 text-slate-500">
+                        {detail}
                       </p>
                     </div>
-                    <span className={`rounded-xl p-2.5 ${background}`}>
-                      <StatIcon size={19} className={color as string} />
-                    </span>
-                  </div>
-                  <p className="mt-3 text-xs leading-5 text-slate-500">
-                    {detail}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-          <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(280px,.8fr)]">
-            <section className="rounded-2xl border border-slate-200 bg-white">
-              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                <div>
-                  <h2 className="font-semibold text-slate-900">
-                    Recent portfolio activity
-                  </h2>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    Most recently updated authorized work
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onNavigate("/portfolio")}
-                  className="text-sm font-semibold text-indigo-700 hover:text-indigo-900"
-                >
-                  Open portfolio{" "}
-                  <ArrowRight size={14} className="ml-1 inline" />
-                </button>
+                  );
+                })}
               </div>
-              {recent.length ? (
-                <EntryTable
-                  entries={recent}
-                  onOpen={id => onNavigate(`/item/${id}`)}
-                  compact
-                />
-              ) : (
-                <div className="p-5">
-                  <Empty
-                    title="Start your teaching-practice portfolio"
-                    body="Create your first lesson plan, scheme, reflection or evidence record. Your saved drafts remain private until you submit them."
-                    action={
-                      isStudent ? (
-                        <div className="flex flex-wrap justify-center gap-2">
-                          <Button
-                            kind="primary"
-                            onClick={() => onCreate("lesson")}
-                          >
-                            <Plus size={15} />
-                            Lesson plan
-                          </Button>
-                          <Button onClick={() => onCreate("reflection")}>
-                            Reflection
-                          </Button>
-                        </div>
-                      ) : undefined
-                    }
-                  />
-                </div>
-              )}
-            </section>
-            <aside className="space-y-4">
-              <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-bold tracking-wider text-indigo-600">
-                      NEXT UP
-                    </p>
-                    <h2 className="mt-1 font-semibold">Your priorities</h2>
+              <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(280px,.8fr)]">
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="font-semibold text-slate-900">
+                        {isStudent
+                          ? "Portfolio requirements"
+                          : "Requirements tracked"}
+                      </h2>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {isStudent
+                          ? "Approved work against requirements for your placement"
+                          : "Active institution portfolio expectations"}
+                      </p>
+                    </div>
+                    {isStudent && (
+                      <span className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">
+                        {completion}% complete
+                      </span>
+                    )}
                   </div>
-                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-amber-50 text-amber-700">
-                    <Clock3 size={17} />
-                  </span>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {counts.revisions > 0 ? (
-                    <button
-                      onClick={() => onNavigate("/feedback")}
-                      className="flex w-full gap-3 rounded-xl border border-rose-100 bg-rose-50/60 p-3 text-left"
-                    >
-                      <span className="mt-1 h-2 w-2 rounded-full bg-rose-600" />
-                      <span>
-                        <b className="block text-sm text-rose-900">
-                          Open reviewer feedback
-                        </b>
-                        <span className="mt-1 block text-xs text-rose-800">
-                          {counts.revisions} item
-                          {counts.revisions === 1 ? "" : "s"} returned for
-                          revision
-                        </span>
-                      </span>
-                    </button>
+                  {isStudent && (
+                    <>
+                      <div
+                        className="mt-5 h-2.5 overflow-hidden rounded-full bg-slate-100"
+                        role="progressbar"
+                        aria-label="Overall portfolio completion"
+                        aria-valuenow={completion}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                      >
+                        <div
+                          className="h-full rounded-full bg-indigo-600 transition-[width] duration-500"
+                          style={{ width: `${completion}%` }}
+                        />
+                      </div>
+                      <div className="mt-2 flex justify-between text-xs text-slate-500">
+                        <span>{approvedRequired} requirements completed</span>
+                        <span>{requiredTotal} required items</span>
+                      </div>
+                    </>
+                  )}
+                  {requirements.length ? (
+                    <div className="mt-5 divide-y divide-slate-100">
+                      {requirements.slice(0, 6).map(requirement => {
+                        const info = categoryInfo[requirement.category];
+                        return (
+                          <div
+                            key={requirement.id}
+                            className="py-3 first:pt-0 last:pb-0"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="truncate text-sm font-medium text-slate-700">
+                                {requirement.label ||
+                                  info?.label ||
+                                  requirement.category}
+                              </span>
+                              <span className="shrink-0 text-xs font-semibold text-slate-500">
+                                {requirement.approved}/
+                                {requirement.requiredCount}
+                              </span>
+                            </div>
+                            {isStudent ? (
+                              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                <div
+                                  className="h-full rounded-full bg-indigo-500"
+                                  style={{ width: `${requirement.percent}%` }}
+                                />
+                              </div>
+                            ) : (
+                              <p className="mt-1 text-xs text-slate-500">
+                                {requirement.requiredCount} required{" "}
+                                {requirement.requiredCount === 1
+                                  ? "item"
+                                  : "items"}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : (
-                    <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
-                      No revision requests waiting on you.
+                    <p className="mt-5 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                      {isInstitutionScoped
+                        ? "No required portfolio categories are configured yet."
+                        : "Choose an institution to view its portfolio requirements."}
                     </p>
                   )}
-                  {counts.drafts > 0 && (
-                    <button
-                      onClick={() => onNavigate("/lessons")}
-                      className="flex w-full gap-3 rounded-xl border border-slate-200 p-3 text-left"
-                    >
-                      <span className="mt-1 h-2 w-2 rounded-full bg-slate-400" />
-                      <span>
-                        <b className="block text-sm text-slate-800">
-                          Finish a saved draft
-                        </b>
-                        <span className="mt-1 block text-xs text-slate-500">
-                          {counts.drafts} private draft
-                          {counts.drafts === 1 ? "" : "s"}
-                        </span>
+                </section>
+                <aside className="space-y-5">
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h2 className="font-semibold text-slate-900">
+                          Portfolio status
+                        </h2>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Current authorized records
+                        </p>
+                      </div>
+                      <span className="text-xl font-semibold tracking-tight text-slate-900">
+                        {statusTotal}
                       </span>
-                    </button>
-                  )}
-                  {counts.drafts === 0 && counts.revisions === 0 && (
-                    <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
-                      You are up to date. Keep your portfolio current with your
-                      next reflection.
-                    </p>
-                  )}
-                </div>
-              </section>
-              <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                <h2 className="font-semibold">Quick actions</h2>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {[
-                    ["Lesson plan", "lesson"],
-                    ["Scheme", "scheme"],
-                    ["Reflection", "reflection"],
-                    ["Evidence", "evidence"],
-                  ].map(([label, kind]) => (
-                    <button
-                      key={kind}
-                      onClick={() => onCreate(kind as Entry["kind"])}
-                      className="flex min-h-14 items-center gap-2 rounded-xl border border-slate-200 px-3 text-left text-xs font-semibold text-slate-700 hover:border-indigo-200 hover:bg-indigo-50"
+                    </div>
+                    <div
+                      className="mt-4 flex h-2 overflow-hidden rounded-full bg-slate-100"
+                      aria-label="Portfolio status distribution"
                     >
-                      <Plus size={14} className="text-indigo-600" />
-                      {label}
+                      {statusBreakdown.map(
+                        status =>
+                          status.count > 0 && (
+                            <span
+                              key={status.key}
+                              className={`${status.color} first:rounded-l-full last:rounded-r-full`}
+                              style={{
+                                width: `${(status.count / Math.max(statusTotal, 1)) * 100}%`,
+                              }}
+                              title={`${status.label}: ${status.count}`}
+                            />
+                          )
+                      )}
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {statusBreakdown
+                        .filter(status => status.count > 0)
+                        .map(status => (
+                          <div
+                            className="flex items-center justify-between text-sm"
+                            key={status.key}
+                          >
+                            <span className="flex items-center gap-2 text-slate-600">
+                              <span
+                                className={`h-2 w-2 rounded-full ${status.color}`}
+                              />
+                              {status.label}
+                            </span>
+                            <span className="font-semibold text-slate-800">
+                              {status.count}
+                            </span>
+                          </div>
+                        ))}
+                      {!statusTotal && (
+                        <p className="text-sm text-slate-500">
+                          No portfolio records to summarize yet.
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                  {isStudent && overview.data?.placement && (
+                    <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+                            Placement
+                          </p>
+                          <h2 className="mt-1 font-semibold text-slate-900">
+                            {overview.data.placement.schoolName}
+                          </h2>
+                        </div>
+                        <GraduationCap size={19} className="text-slate-400" />
+                      </div>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {overview.data.placement.subject} ·{" "}
+                        {overview.data.placement.cohort}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => onNavigate("/placement")}
+                        className="mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800"
+                      >
+                        View placement details{" "}
+                        <ArrowRight size={14} className="ml-1 inline" />
+                      </button>
+                    </section>
+                  )}
+                </aside>
+              </div>
+              <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(280px,.8fr)]">
+                <section className="rounded-2xl border border-slate-200 bg-white">
+                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                    <div>
+                      <h2 className="font-semibold text-slate-900">
+                        Recent portfolio activity
+                      </h2>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        Most recently updated authorized work
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("/portfolio")}
+                      className="text-sm font-semibold text-indigo-700 hover:text-indigo-900"
+                    >
+                      Open portfolio{" "}
+                      <ArrowRight size={14} className="ml-1 inline" />
                     </button>
-                  ))}
-                </div>
-              </section>
-            </aside>
-          </div>
-          <p className="mt-5 flex items-start gap-2 text-xs leading-relaxed text-slate-500">
-            <ShieldCheck
-              size={14}
-              className="mt-0.5 shrink-0 text-emerald-600"
-            />
-            Portfolio progress reflects approved work against active institution
-            requirements. This account view is limited to its authorized
-            institution and assigned records.
-          </p>
+                  </div>
+                  {recent.length ? (
+                    <EntryTable
+                      entries={recent}
+                      onOpen={id => onNavigate(`/item/${id}`)}
+                      compact
+                    />
+                  ) : (
+                    <div className="p-5">
+                      <Empty
+                        title="Start your teaching-practice portfolio"
+                        body="Create your first lesson plan, scheme, reflection or evidence record. Your saved drafts remain private until you submit them."
+                        action={
+                          isStudent ? (
+                            <div className="flex flex-wrap justify-center gap-2">
+                              <Button
+                                kind="primary"
+                                onClick={() => onCreate("lesson")}
+                              >
+                                <Plus size={15} />
+                                Lesson plan
+                              </Button>
+                              <Button onClick={() => onCreate("reflection")}>
+                                Reflection
+                              </Button>
+                            </div>
+                          ) : undefined
+                        }
+                      />
+                    </div>
+                  )}
+                </section>
+                <aside className="space-y-4">
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold tracking-wider text-indigo-600">
+                          NEXT UP
+                        </p>
+                        <h2 className="mt-1 font-semibold">
+                          {isStudent
+                            ? "Your priorities"
+                            : isReviewer
+                              ? "Review priorities"
+                              : "Workspace actions"}
+                        </h2>
+                      </div>
+                      <span className="grid h-9 w-9 place-items-center rounded-xl bg-amber-50 text-amber-700">
+                        <Clock3 size={17} />
+                      </span>
+                    </div>
+                    {isStudent ? (
+                      <div className="mt-4 space-y-3">
+                        {counts.revisions > 0 ? (
+                          <button
+                            onClick={() => onNavigate("/feedback")}
+                            className="flex w-full gap-3 rounded-xl border border-rose-100 bg-rose-50/60 p-3 text-left"
+                          >
+                            <span className="mt-1 h-2 w-2 rounded-full bg-rose-600" />
+                            <span>
+                              <b className="block text-sm text-rose-900">
+                                Open reviewer feedback
+                              </b>
+                              <span className="mt-1 block text-xs text-rose-800">
+                                {counts.revisions} item
+                                {counts.revisions === 1 ? "" : "s"} returned for
+                                revision
+                              </span>
+                            </span>
+                          </button>
+                        ) : (
+                          <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                            No revision requests waiting on you.
+                          </p>
+                        )}
+                        {counts.drafts > 0 && (
+                          <button
+                            onClick={() => onNavigate("/lessons")}
+                            className="flex w-full gap-3 rounded-xl border border-slate-200 p-3 text-left"
+                          >
+                            <span className="mt-1 h-2 w-2 rounded-full bg-slate-400" />
+                            <span>
+                              <b className="block text-sm text-slate-800">
+                                Finish a saved draft
+                              </b>
+                              <span className="mt-1 block text-xs text-slate-500">
+                                {counts.drafts} private draft
+                                {counts.drafts === 1 ? "" : "s"}
+                              </span>
+                            </span>
+                          </button>
+                        )}
+                        {counts.drafts === 0 && counts.revisions === 0 && (
+                          <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
+                            You are up to date. Keep your portfolio current with
+                            your next reflection.
+                          </p>
+                        )}
+                      </div>
+                    ) : isReviewer ? (
+                      <div className="mt-4 space-y-3">
+                        <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                          {counts.review
+                            ? `${counts.review} submitted record${counts.review === 1 ? "" : "s"} need review.`
+                            : "No submitted work is waiting in your assigned queue."}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => onNavigate("/reviews")}
+                          className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-3 text-left text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
+                        >
+                          Open review queue <ArrowRight size={15} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                          Review institution progress and keep portfolio
+                          requirements current.
+                        </p>
+                        {isPlatformAdmin ? (
+                          <button
+                            type="button"
+                            onClick={() => onNavigate("/admin/institutions")}
+                            className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-3 text-left text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
+                          >
+                            Manage institutions <ArrowRight size={15} />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onNavigate("/admin/requirements")}
+                            className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-3 text-left text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
+                          >
+                            Manage requirements <ArrowRight size={15} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                  {isStudent && (
+                    <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <h2 className="font-semibold">Quick actions</h2>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        {[
+                          ["Lesson plan", "lesson"],
+                          ["Scheme", "scheme"],
+                          ["Reflection", "reflection"],
+                          ["Evidence", "evidence"],
+                        ].map(([label, kind]) => (
+                          <button
+                            key={kind}
+                            onClick={() => onCreate(kind as Entry["kind"])}
+                            className="flex min-h-14 items-center gap-2 rounded-xl border border-slate-200 px-3 text-left text-xs font-semibold text-slate-700 hover:border-indigo-200 hover:bg-indigo-50"
+                          >
+                            <Plus size={14} className="text-indigo-600" />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </aside>
+              </div>
+              <p className="mt-5 flex items-start gap-2 text-xs leading-relaxed text-slate-500">
+                <ShieldCheck
+                  size={14}
+                  className="mt-0.5 shrink-0 text-emerald-600"
+                />
+                Portfolio progress reflects approved work against active
+                institution requirements. This account view is limited to its
+                authorized institution and assigned records.
+              </p>
+            </>
+          )}
         </>
       )}
     </>
