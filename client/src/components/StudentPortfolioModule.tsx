@@ -86,116 +86,6 @@ const statusTone: Record<string, string> = {
   rejected: "bg-rose-50 text-rose-800",
   archived: "bg-slate-100 text-slate-600",
 };
-const demoEntries: Entry[] = [
-  {
-    id: -1,
-    institutionId: 0,
-    userId: 0,
-    kind: "scheme",
-    title: "Fractions and equivalent values · term scheme",
-    subject: "Mathematics",
-    className: "Form 2A",
-    lessonDate: "2026-09-04",
-    status: "approved",
-    version: 1,
-    payload: { school: "Fictional Practice School", term: "Term 3" },
-    createdAt: new Date("2026-09-04T09:00:00Z"),
-    updatedAt: new Date("2026-10-18T10:00:00Z"),
-  },
-  {
-    id: -2,
-    institutionId: 0,
-    userId: 0,
-    kind: "lesson",
-    title: "Equivalent fractions with paper strips",
-    subject: "Mathematics",
-    className: "Form 2A",
-    lessonDate: "2026-10-19",
-    status: "under_review",
-    version: 1,
-    payload: {
-      topic: "Equivalent fractions",
-      stages: [
-        { stage: "Explore", duration: 15 },
-        { stage: "Practice", duration: 25 },
-      ],
-    },
-    createdAt: new Date("2026-10-19T08:00:00Z"),
-    updatedAt: new Date("2026-10-20T12:30:00Z"),
-  },
-  {
-    id: -3,
-    institutionId: 0,
-    userId: 0,
-    kind: "reflection",
-    title: "Reflection · learner explanations",
-    subject: "Mathematics",
-    className: "Form 2A",
-    lessonDate: "2026-10-19",
-    status: "revision_required",
-    version: 1,
-    payload: { whatHappened: "Fictional demonstration record." },
-    createdAt: new Date("2026-10-19T15:00:00Z"),
-    updatedAt: new Date("2026-10-21T09:00:00Z"),
-  },
-  {
-    id: -4,
-    institutionId: 0,
-    userId: 0,
-    kind: "evidence",
-    title: "Teacher-prepared reading-resource note",
-    subject: "English Language",
-    className: "Form 2B",
-    lessonDate: "2026-10-16",
-    status: "draft",
-    version: 1,
-    payload: {
-      category: "teaching_resource",
-      description: "Fictional metadata only; no real file or learner is shown.",
-    },
-    createdAt: new Date("2026-10-16T11:00:00Z"),
-    updatedAt: new Date("2026-10-16T11:00:00Z"),
-  },
-];
-const demoRequirements = [
-  {
-    category: "scheme",
-    required: true,
-    requiredCount: 1,
-    label: "Scheme of work",
-  },
-  {
-    category: "lesson",
-    required: true,
-    requiredCount: 4,
-    label: "Reviewed lesson plans",
-  },
-  {
-    category: "reflection",
-    required: true,
-    requiredCount: 2,
-    label: "Reflective journal entries",
-  },
-  {
-    category: "evidence",
-    required: true,
-    requiredCount: 1,
-    label: "Teaching evidence",
-  },
-  {
-    category: "observation",
-    required: false,
-    requiredCount: 2,
-    label: "Observation records",
-  },
-  {
-    category: "final_report",
-    required: true,
-    requiredCount: 1,
-    label: "Final practice report",
-  },
-];
-
 function StatusBadge({ status }: { status: string }) {
   return (
     <span
@@ -241,37 +131,13 @@ export default function StudentPortfolioModule({
     retry: false,
   });
   const isStudent = user.activated && user.roles.includes("student_teacher");
-  const isServiceOutage = (error: unknown) => {
-    if (!error) return false;
-    const failure = error as {
-      data?: { httpStatus?: number };
-      message?: string;
-    };
-    const status = failure.data?.httpStatus;
-    return (
-      (typeof status === "number" && status >= 500) ||
-      /failed to fetch|network error|connection refused|database is unavailable|service unavailable|temporarily unavailable|private storage/i.test(
-        failure.message ?? ""
-      )
-    );
-  };
   const hasLoadError = Boolean(
     overview.error || ((kind || path === "/submissions") && listQuery.error)
   );
-  const isOfflineDemo = Boolean(
-    isStudent &&
-      (isServiceOutage(overview.error) ||
-        ((kind || path === "/submissions") && isServiceOutage(listQuery.error)))
-  );
   const entries = useMemo(() => {
-    if (isOfflineDemo) return isStudent ? demoEntries : [];
     if (path === "/portfolio") return (overview.data?.entries ?? []) as Entry[];
     return (listQuery.data ?? []) as Entry[];
-  }, [isOfflineDemo, isStudent, listQuery.data, overview.data?.entries, path]);
-  const requirements =
-    isOfflineDemo && isStudent
-      ? demoRequirements
-      : (overview.data?.requirements ?? []);
+  }, [listQuery.data, overview.data?.entries, path]);
   const queryText = (localSearch || searchTerm).trim().toLowerCase();
   const categoryEntries = entries.filter(entry => {
     if (path === "/submissions" && ["draft", "archived"].includes(entry.status))
@@ -315,19 +181,7 @@ export default function StudentPortfolioModule({
     [path, statusFilter, evidenceFilter, sort, queryText]
   );
 
-  const sourceBanner = isOfflineDemo ? (
-    <div
-      role="status"
-      className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
-    >
-      <strong className="block font-bold">DEMO MODE · READ ONLY</strong>
-      <span className="mt-1 block">
-        The portfolio backend is unavailable. Only clearly fictional sample
-        records are shown; no edits, uploads or submissions are saved in this
-        mode.
-      </span>
-    </div>
-  ) : hasLoadError ? (
+  const sourceBanner = hasLoadError ? (
     <div
       role="alert"
       className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"
@@ -372,7 +226,7 @@ export default function StudentPortfolioModule({
               A live view of saved work and configured institution requirements.
             </p>
           </div>
-          {isStudent && !isOfflineDemo && !hasLoadError && (
+          {isStudent && !hasLoadError && (
             <button
               type="button"
               onClick={() => onCreate()}
@@ -391,7 +245,7 @@ export default function StudentPortfolioModule({
           >
             Loading portfolio overview…
           </div>
-        ) : hasLoadError && !isOfflineDemo ? null : (
+        ) : hasLoadError ? null : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {kinds.map(([key, info]) => {
               const Icon = info.icon;
@@ -482,10 +336,7 @@ export default function StudentPortfolioModule({
             })}
           </div>
         )}
-        {!entries.length &&
-          !isOfflineDemo &&
-          !hasLoadError &&
-          !overview.isLoading && (
+        {!entries.length && !hasLoadError && !overview.isLoading && (
             <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-600">
               No portfolio records yet. Use an authorized action to create a
               private draft.
@@ -526,7 +377,7 @@ export default function StudentPortfolioModule({
           </h1>
           <p className="mt-1 text-sm text-slate-500">{listDescription}</p>
         </div>
-        {isStudent && kind && !isOfflineDemo && !hasLoadError && (
+        {isStudent && kind && !hasLoadError && (
           <button
             type="button"
             onClick={() => onCreate(kind)}
@@ -545,7 +396,7 @@ export default function StudentPortfolioModule({
         )}
       </header>
       {sourceBanner}
-      {(overview.isLoading || listQuery.isLoading) && !isOfflineDemo && (
+      {(overview.isLoading || listQuery.isLoading) && (
         <div
           role="status"
           className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500"
@@ -553,8 +404,7 @@ export default function StudentPortfolioModule({
           Loading authorized portfolio records…
         </div>
       )}
-      {((!overview.isLoading && !listQuery.isLoading && !hasLoadError) ||
-        isOfflineDemo) && (
+      {!overview.isLoading && !listQuery.isLoading && !hasLoadError && (
         <>
           <div className="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-[minmax(0,1fr)_180px_180px]">
             <label className="relative">
@@ -676,7 +526,7 @@ export default function StudentPortfolioModule({
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={entry.status} />
-                    {!isOfflineDemo && !hasLoadError && (
+                    {!hasLoadError && (
                       <button
                         type="button"
                         onClick={() => onNavigate(`/item/${entry.id}`)}
@@ -685,8 +535,7 @@ export default function StudentPortfolioModule({
                         History <ArrowRight size={13} />
                       </button>
                     )}
-                    {!isOfflineDemo &&
-                      !hasLoadError &&
+                    {!hasLoadError &&
                       isStudent &&
                       ["draft", "revision_required"].includes(entry.status) && (
                         <button
@@ -715,7 +564,6 @@ export default function StudentPortfolioModule({
               </p>
               {isStudent &&
                 kind &&
-                !isOfflineDemo &&
                 !hasLoadError &&
                 !categoryEntries.length && (
                   <button
@@ -755,7 +603,7 @@ export default function StudentPortfolioModule({
               </button>
             </nav>
           )}
-          {!isOfflineDemo && sorted.length >= 100 && (
+          {sorted.length >= 100 && (
             <p className="mt-3 text-xs text-slate-500">
               The server returns the most recent 100 matching records. Refine
               search or filters to find older work.

@@ -46,8 +46,11 @@ For fictional sample data, run `pnpm seed:demo --confirm-fictional-demo-seed`. T
 - `pnpm build` / `pnpm start` — production build and server
 - `pnpm check` — TypeScript check
 - `pnpm test` — application unit tests (uses a test-only CSRF key; no production `.env` is required)
+- `pnpm verify:staging` — read-only staging schema, RLS/grant, and private Storage checks; requires explicit `STAGING_*` variables
 - `pnpm db:generate` — generate a Drizzle PostgreSQL migration
 - `pnpm db:migrate` — apply generated migrations
+
+Follow the [staging acceptance checklist](docs/staging-acceptance.md) before accepting a staging release. The verifier does not run migrations or modify database/storage data.
 
 The checked-in application schema is now PostgreSQL. Old MySQL migration files under `drizzle/` are historical and must not be applied to Supabase. Review generated SQL before applying it to a live project. The app does not automatically copy data from a former MySQL database; migrate any existing records separately before switching production traffic.
 

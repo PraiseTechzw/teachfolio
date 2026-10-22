@@ -102,6 +102,17 @@ async function verifyStorage(baseUrl: string, key: string, bucketName: string) {
   }
 }
 
+async function resolves(hostname: string, label: string): Promise<boolean> {
+  try {
+    await lookup(hostname);
+    record(label, true, "Host resolves.");
+    return true;
+  } catch (error) {
+    record(label, false, errorCode(error));
+    return false;
+  }
+}
+
 async function main() {
   if (process.env.STAGING_CHECK_CONFIRMATION !== CONFIRMATION) {
     record("Safety confirmation", false, `Set STAGING_CHECK_CONFIRMATION=${CONFIRMATION} to run read-only checks.`);
@@ -128,28 +139,25 @@ async function main() {
     return;
   }
 
-  for (const [label, hostname] of [
-    ["Staging database DNS", databaseUrl.hostname],
-    ["Staging Supabase DNS", supabaseUrl.hostname],
-  ] as const) {
-    try {
-      await lookup(hostname);
-      record(label, true, "Host resolves.");
-    } catch (error) {
-      record(label, false, errorCode(error));
-    }
-  }
+  const databaseResolves = await resolves(
+    databaseUrl.hostname,
+    "Staging database DNS"
+  );
+  const supabaseResolves = await resolves(
+    supabaseUrl.hostname,
+    "Staging Supabase DNS"
+  );
   try {
     await lookup("supabase.com");
-    record("General DNS control", true, "Public DNS resolves.");
+    console.log("INFO General DNS control: public DNS resolves.");
   } catch (error) {
-    record("General DNS control", false, errorCode(error));
+    console.log(`INFO General DNS control: ${errorCode(error)}.`);
   }
 
-  if (checks.some(check => !check.passed)) {
-    console.log("Skipping remote checks because configuration or DNS checks failed.");
-  } else {
+  if (databaseResolves) {
     await verifyDatabase(databaseUrl.toString());
+  }
+  if (supabaseResolves) {
     await verifyStorage(
       supabaseUrl.toString(),
       secretKey,

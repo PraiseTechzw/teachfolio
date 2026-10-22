@@ -35,6 +35,16 @@ Use a dedicated, non-production Supabase project and synthetic data only. This c
   ```
 
 - [ ] Record verifier output (PASS/FAIL names only) in the staging change record. Review any custom-role Postgres policy reported by the script manually; the app is designed not to grant browser table access.
+- [ ] For that manual review, use the Supabase SQL editor against staging and inspect policy expressions without changing them:
+
+  ```sql
+  SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check
+  FROM pg_policies
+  WHERE schemaname = 'public'
+  ORDER BY tablename, policyname;
+  ```
+
+  Confirm each custom-role policy is intentional and cannot expose cross-institution data. Do not add a browser policy as a workaround for failed application authorization.
 - [ ] Start the staging application with staging-only Auth, database, storage, and session configuration. Check the server logs for successful startup without recording secret environment values.
 
 ## 2. Seed synthetic accounts and tenant boundary cases

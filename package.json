@@ -10,7 +10,7 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
-    "verify:staging": "tsx scripts/verify-staging.ts",
+    "verify:staging": "node --import tsx scripts/verify-staging.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "db:migrate": "drizzle-kit migrate",
