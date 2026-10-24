@@ -89,8 +89,14 @@ const inviteTokenSchema = z
 const accountHasActiveAssignment = sql`EXISTS (SELECT 1 FROM access_assignments AS aa WHERE aa."userId" = ${users.id} AND aa.status = 'active')`;
 const accountHasSuspendedAssignment = sql`EXISTS (SELECT 1 FROM access_assignments AS aa WHERE aa."userId" = ${users.id} AND aa.status = 'suspended')`;
 const activeAccountCondition = sql`${users.disabled} = false AND ${users.emailVerified} = true AND ${accountHasActiveAssignment}`;
-const suspendedAccountCondition = sql`${users.disabled} = true OR (NOT ${accountHasActiveAssignment} AND ${accountHasSuspendedAssignment})`;
-const pendingAccountCondition = sql`${users.disabled} = false AND (${users.emailVerified} = false OR (NOT ${accountHasActiveAssignment} AND NOT ${accountHasSuspendedAssignment}))`;
+const deletedAccountCondition = eq(users.loginMethod, "deleted");
+const suspendedAccountCondition = sql`${users.loginMethod} <> 'deleted' AND (${users.disabled} = true OR (NOT ${accountHasActiveAssignment} AND ${accountHasSuspendedAssignment}))`;
+const pendingAccountCondition = sql`${users.loginMethod} <> 'deleted' AND ${users.disabled} = false AND (${users.emailVerified} = false OR (NOT ${accountHasActiveAssignment} AND NOT ${accountHasSuspendedAssignment}))`;
+const dayAfter = (value: string) => {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date;
+};
 function authRedirectUrl(origin: string, inviteToken?: string) {
   const url = new URL("/", origin);
   if (inviteToken) url.searchParams.set("invite", inviteToken);
@@ -1838,7 +1844,7 @@ const appRouter = router({
     platformSummary: requireRoles("platform_admin").query(async () => {
       const database = await db.getDb();
       if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
-      const [userRows, assignmentRows, invitationRows, entryRows, reviewRows, fileRows, activeUserRows, pendingUserRows, suspendedUserRows] = await Promise.all([
+      const [userRows, assignmentRows, invitationRows, entryRows, reviewRows, fileRows, activeUserRows, pendingUserRows, suspendedUserRows, deletedUserRows] = await Promise.all([
         database.select({ total: count() }).from(users),
         database.select({ total: count() }).from(accessAssignments).where(eq(accessAssignments.status, "active")),
         database.select({ total: count() }).from(invitations).where(and(isNull(invitations.acceptedAt), gt(invitations.expiresAt, new Date()))),
@@ -1848,8 +1854,9 @@ const appRouter = router({
         database.select({ total: count() }).from(users).where(activeAccountCondition),
         database.select({ total: count() }).from(users).where(pendingAccountCondition),
         database.select({ total: count() }).from(users).where(suspendedAccountCondition),
+        database.select({ total: count() }).from(users).where(deletedAccountCondition),
       ]);
-      return { users: Number(userRows[0]?.total ?? 0), activeAssignments: Number(assignmentRows[0]?.total ?? 0), activeUsers: Number(activeUserRows[0]?.total ?? 0), pendingUsers: Number(pendingUserRows[0]?.total ?? 0), suspendedUsers: Number(suspendedUserRows[0]?.total ?? 0), pendingInvitations: Number(invitationRows[0]?.total ?? 0), pendingSubmissions: Number(entryRows[0]?.total ?? 0), reviews: Number(reviewRows[0]?.total ?? 0), evidenceFiles: Number(fileRows[0]?.total ?? 0), evidenceBytes: Number(fileRows[0]?.bytes ?? 0) };
+      return { users: Number(userRows[0]?.total ?? 0), activeAssignments: Number(assignmentRows[0]?.total ?? 0), activeUsers: Number(activeUserRows[0]?.total ?? 0), pendingUsers: Number(pendingUserRows[0]?.total ?? 0), suspendedUsers: Number(suspendedUserRows[0]?.total ?? 0), deletedUsers: Number(deletedUserRows[0]?.total ?? 0), pendingInvitations: Number(invitationRows[0]?.total ?? 0), pendingSubmissions: Number(entryRows[0]?.total ?? 0), reviews: Number(reviewRows[0]?.total ?? 0), evidenceFiles: Number(fileRows[0]?.total ?? 0), evidenceBytes: Number(fileRows[0]?.bytes ?? 0) };
     }),
     platformConfiguration: requireRoles("platform_admin").query(async () => {
       const database = await db.getDb();
@@ -1867,7 +1874,7 @@ const appRouter = router({
       await db.writeAudit({ institutionId: null, actorUserId: ctx.user.id, action: "platform_configuration_updated", targetType: "platform_setting", targetId: "platform_defaults", detail: `Invitation expiry ${input.invitationExpiryDays} days; evidence upload cap ${input.maxEvidenceMiB} MiB.` });
       return { success: true };
     }),
-    platformUsers: requireRoles("platform_admin").input(z.object({ page: z.number().int().min(1).default(1), pageSize: z.number().int().min(10).max(100).default(25), search: z.string().trim().max(120).default(""), role: z.enum(["student_teacher", "supervisor", "lecturer", "coordinator", "institution_admin", "platform_admin"]).optional(), status: z.enum(["active", "pending", "suspended"]).optional(), verified: z.enum(["all", "verified", "unverified"]).default("all"), registeredFrom: z.string().date().optional(), registeredTo: z.string().date().optional(), sort: z.enum(["newest", "oldest", "last_sign_in"]).default("newest") }).default({ page: 1, pageSize: 25, search: "", verified: "all", sort: "newest" })).query(async ({ input }) => {
+    platformUsers: requireRoles("platform_admin").input(z.object({ page: z.number().int().min(1).default(1), pageSize: z.number().int().min(10).max(100).default(25), search: z.string().trim().max(120).default(""), role: z.enum(["student_teacher", "supervisor", "lecturer", "coordinator", "institution_admin", "platform_admin"]).optional(), status: z.enum(["active", "pending", "suspended", "deleted"]).optional(), verified: z.enum(["all", "verified", "unverified"]).default("all"), registeredFrom: z.string().date().optional(), registeredTo: z.string().date().optional(), sort: z.enum(["newest", "oldest", "last_sign_in"]).default("newest") }).default({ page: 1, pageSize: 25, search: "", verified: "all", sort: "newest" })).query(async ({ input }) => {
       const database = await db.getDb();
       if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const search = `%${input.search.toLowerCase()}%`;
@@ -1878,13 +1885,14 @@ const appRouter = router({
         input.status === "active" ? and(eq(users.disabled, false), eq(accessAssignments.status, "active"), eq(users.emailVerified, true)) : undefined,
         input.status === "pending" ? pendingAccountCondition : undefined,
         input.status === "suspended" ? suspendedAccountCondition : undefined,
+        input.status === "deleted" ? deletedAccountCondition : undefined,
         input.registeredFrom ? sql`${users.createdAt} >= ${new Date(`${input.registeredFrom}T00:00:00.000Z`)}` : undefined,
-        input.registeredTo ? sql`${users.createdAt} < ${new Date(`${input.registeredTo}T23:59:59.999Z`)}` : undefined,
+        input.registeredTo ? sql`${users.createdAt} < ${dayAfter(input.registeredTo)}` : undefined,
       ];
       const where = and(...conditions);
       const totalRows = await database.select({ total: countDistinct(users.id) }).from(users).leftJoin(accessAssignments, eq(accessAssignments.userId, users.id)).where(where);
       const order = input.sort === "oldest" ? asc(users.createdAt) : input.sort === "last_sign_in" ? desc(users.lastSignedIn) : desc(users.createdAt);
-      const pageRows = await database.select({ userId: users.id, name: users.name, email: users.email, phone: users.phone, emailVerified: users.emailVerified, disabled: users.disabled, createdAt: users.createdAt, lastSignedIn: users.lastSignedIn }).from(users).leftJoin(accessAssignments, eq(accessAssignments.userId, users.id)).where(where).groupBy(users.id).orderBy(order).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+      const pageRows = await database.select({ userId: users.id, name: users.name, email: users.email, phone: users.phone, emailVerified: users.emailVerified, disabled: users.disabled, deleted: deletedAccountCondition, createdAt: users.createdAt, lastSignedIn: users.lastSignedIn }).from(users).leftJoin(accessAssignments, eq(accessAssignments.userId, users.id)).where(where).groupBy(users.id).orderBy(order).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
       const ids = pageRows.map(row => row.userId);
       const assignmentRows = ids.length ? await database.select({ id: accessAssignments.id, userId: accessAssignments.userId, institutionId: accessAssignments.institutionId, institutionName: institutions.name, role: accessAssignments.role, status: accessAssignments.status }).from(accessAssignments).leftJoin(institutions, eq(accessAssignments.institutionId, institutions.id)).where(inArray(accessAssignments.userId, ids)) : [];
       const rows = pageRows.map(user => ({ ...user, assignments: assignmentRows.filter(assignment => assignment.userId === user.userId) }));
@@ -1893,13 +1901,14 @@ const appRouter = router({
         database.select({ total: count() }).from(users).where(activeAccountCondition),
         database.select({ total: count() }).from(users).where(pendingAccountCondition),
         database.select({ total: count() }).from(users).where(suspendedAccountCondition),
+        database.select({ total: count() }).from(users).where(deletedAccountCondition),
       ]);
-      return { rows, total: Number(totalRows[0]?.total ?? 0), page: input.page, pageSize: input.pageSize, pages: Math.ceil(Number(totalRows[0]?.total ?? 0) / input.pageSize), metrics: { all: Number(totals[0][0]?.total ?? 0), active: Number(totals[1][0]?.total ?? 0), pending: Number(totals[2][0]?.total ?? 0), suspended: Number(totals[3][0]?.total ?? 0) } };
+      return { rows, total: Number(totalRows[0]?.total ?? 0), page: input.page, pageSize: input.pageSize, pages: Math.ceil(Number(totalRows[0]?.total ?? 0) / input.pageSize), metrics: { all: Number(totals[0][0]?.total ?? 0), active: Number(totals[1][0]?.total ?? 0), pending: Number(totals[2][0]?.total ?? 0), suspended: Number(totals[3][0]?.total ?? 0), deleted: Number(totals[4][0]?.total ?? 0) } };
     }),
     platformUserDetails: requireRoles("platform_admin").input(z.object({ userId: z.number().int().positive() })).query(async ({ input }) => {
       const database = await db.getDb();
       if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
-      const accountRows = await database.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, emailVerified: users.emailVerified, disabled: users.disabled, deletionPending: users.deletionPending, createdAt: users.createdAt, lastSignedIn: users.lastSignedIn }).from(users).where(eq(users.id, input.userId)).limit(1);
+      const accountRows = await database.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, emailVerified: users.emailVerified, disabled: users.disabled, deleted: deletedAccountCondition, deletionPending: users.deletionPending, createdAt: users.createdAt, lastSignedIn: users.lastSignedIn }).from(users).where(eq(users.id, input.userId)).limit(1);
       const account = accountRows[0];
       if (!account) throw new TRPCError({ code: "NOT_FOUND" });
       const [assignments, linked] = await Promise.all([
@@ -2015,11 +2024,11 @@ const appRouter = router({
       await db.writeAudit({ institutionId: null, actorUserId: ctx.user.id, action: input.action === "password_reset" ? "platform_password_reset_requested" : "platform_email_verification_resent", targetType: "user", targetId: String(input.userId), detail: "Recovery email requested by platform administrator." });
       return { success: true };
     }),
-    exportPlatformUsers: requireRoles("platform_admin").input(z.object({ search: z.string().trim().max(120).default(""), role: z.enum(["student_teacher", "supervisor", "lecturer", "coordinator", "institution_admin", "platform_admin"]).optional(), status: z.enum(["active", "pending", "suspended"]).optional(), verified: z.enum(["all", "verified", "unverified"]).default("all"), registeredFrom: z.string().date().optional(), registeredTo: z.string().date().optional() }).default({ search: "", verified: "all" })).query(async ({ input }) => {
+    exportPlatformUsers: requireRoles("platform_admin").input(z.object({ search: z.string().trim().max(120).default(""), role: z.enum(["student_teacher", "supervisor", "lecturer", "coordinator", "institution_admin", "platform_admin"]).optional(), status: z.enum(["active", "pending", "suspended", "deleted"]).optional(), verified: z.enum(["all", "verified", "unverified"]).default("all"), registeredFrom: z.string().date().optional(), registeredTo: z.string().date().optional() }).default({ search: "", verified: "all" })).query(async ({ input }) => {
       const database = await db.getDb();
       if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const term = `%${input.search.toLowerCase()}%`;
-      const where = and(input.search ? sql`(lower(coalesce(${users.name}, '')) LIKE ${term} OR lower(coalesce(${users.email}, '')) LIKE ${term} OR lower(coalesce(${users.phone}, '')) LIKE ${term} OR cast(${users.id} as text) LIKE ${term})` : undefined, input.role ? eq(accessAssignments.role, input.role) : undefined, input.verified === "verified" ? eq(users.emailVerified, true) : input.verified === "unverified" ? eq(users.emailVerified, false) : undefined, input.status === "active" ? and(eq(users.disabled, false), eq(users.emailVerified, true), eq(accessAssignments.status, "active")) : undefined, input.status === "pending" ? pendingAccountCondition : undefined, input.status === "suspended" ? suspendedAccountCondition : undefined, input.registeredFrom ? sql`${users.createdAt} >= ${new Date(`${input.registeredFrom}T00:00:00.000Z`)}` : undefined, input.registeredTo ? sql`${users.createdAt} < ${new Date(`${input.registeredTo}T23:59:59.999Z`)}` : undefined);
+      const where = and(input.search ? sql`(lower(coalesce(${users.name}, '')) LIKE ${term} OR lower(coalesce(${users.email}, '')) LIKE ${term} OR lower(coalesce(${users.phone}, '')) LIKE ${term} OR cast(${users.id} as text) LIKE ${term})` : undefined, input.role ? eq(accessAssignments.role, input.role) : undefined, input.verified === "verified" ? eq(users.emailVerified, true) : input.verified === "unverified" ? eq(users.emailVerified, false) : undefined, input.status === "active" ? and(eq(users.disabled, false), eq(users.emailVerified, true), eq(accessAssignments.status, "active")) : undefined, input.status === "pending" ? pendingAccountCondition : undefined, input.status === "suspended" ? suspendedAccountCondition : undefined, input.status === "deleted" ? deletedAccountCondition : undefined, input.registeredFrom ? sql`${users.createdAt} >= ${new Date(`${input.registeredFrom}T00:00:00.000Z`)}` : undefined, input.registeredTo ? sql`${users.createdAt} < ${dayAfter(input.registeredTo)}` : undefined);
       const idRows = await database.selectDistinct({ id: users.id }).from(users).leftJoin(accessAssignments, eq(accessAssignments.userId, users.id)).where(where).orderBy(desc(users.id)).limit(5000);
       const ids = idRows.map(row => row.id);
       const rows = ids.length ? await database.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, emailVerified: users.emailVerified, disabled: users.disabled, createdAt: users.createdAt, lastSignedIn: users.lastSignedIn }).from(users).where(inArray(users.id, ids)).orderBy(desc(users.createdAt)) : [];
@@ -2408,7 +2417,7 @@ const appRouter = router({
           input.search ? sql`(lower(${auditLogs.action}) LIKE ${search} OR lower(${auditLogs.targetType}) LIKE ${search} OR lower(${auditLogs.targetId}) LIKE ${search} OR lower(coalesce(${auditLogs.detail}, '')) LIKE ${search})` : undefined,
           input.action ? eq(auditLogs.action, input.action) : undefined,
           input.from ? sql`${auditLogs.createdAt} >= ${new Date(`${input.from}T00:00:00.000Z`)}` : undefined,
-          input.to ? sql`${auditLogs.createdAt} < ${new Date(`${input.to}T23:59:59.999Z`)}` : undefined,
+          input.to ? sql`${auditLogs.createdAt} < ${dayAfter(input.to)}` : undefined,
         );
         const totalRows = await database.select({ total: count() }).from(auditLogs).where(where);
         const rows = await database.select().from(auditLogs).where(where).orderBy(desc(auditLogs.createdAt)).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
@@ -2419,7 +2428,7 @@ const appRouter = router({
       const database = await db.getDb();
       if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const search = `%${input.search.toLowerCase()}%`;
-      const where = and(input.search ? sql`(lower(${auditLogs.action}) LIKE ${search} OR lower(${auditLogs.targetType}) LIKE ${search} OR lower(${auditLogs.targetId}) LIKE ${search} OR lower(coalesce(${auditLogs.detail}, '')) LIKE ${search})` : undefined, input.action ? eq(auditLogs.action, input.action) : undefined, input.from ? sql`${auditLogs.createdAt} >= ${new Date(`${input.from}T00:00:00.000Z`)}` : undefined, input.to ? sql`${auditLogs.createdAt} < ${new Date(`${input.to}T23:59:59.999Z`)}` : undefined);
+      const where = and(input.search ? sql`(lower(${auditLogs.action}) LIKE ${search} OR lower(${auditLogs.targetType}) LIKE ${search} OR lower(${auditLogs.targetId}) LIKE ${search} OR lower(coalesce(${auditLogs.detail}, '')) LIKE ${search})` : undefined, input.action ? eq(auditLogs.action, input.action) : undefined, input.from ? sql`${auditLogs.createdAt} >= ${new Date(`${input.from}T00:00:00.000Z`)}` : undefined, input.to ? sql`${auditLogs.createdAt} < ${dayAfter(input.to)}` : undefined);
       const rows = await database.select().from(auditLogs).where(where).orderBy(desc(auditLogs.createdAt)).limit(10000);
       return ["id,institution_id,actor_user_id,action,target_type,target_id,detail,created_at", ...rows.map(row => [row.id, row.institutionId, row.actorUserId, row.action, row.targetType, row.targetId, row.detail, row.createdAt.toISOString()].map(csvCell).join(","))].join("\n");
     }),
