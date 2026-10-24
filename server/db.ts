@@ -21,7 +21,24 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const existing = await db.select({ disabled: users.disabled, deletionPending: users.deletionPending, name: users.name }).from(users).where(eq(users.openId, user.openId)).limit(1);
+  let existing: { disabled: boolean; deletionPending: boolean; name: string | null }[];
+  try {
+    existing = await db.select({ disabled: users.disabled, deletionPending: users.deletionPending, name: users.name }).from(users).where(eq(users.openId, user.openId)).limit(1);
+  } catch (error) {
+    // Drizzle's client error includes SQL parameters (including the user's
+    // Supabase ID). Log only the underlying Postgres code/message so Render
+    // logs reveal the real cause without exposing query values.
+    let cause: unknown = error;
+    while (cause && typeof cause === "object" && "cause" in cause && cause.cause) {
+      cause = cause.cause;
+    }
+    const databaseError = cause && typeof cause === "object" ? cause as { code?: unknown; message?: unknown } : null;
+    console.error("[Database] User lookup failed", {
+      code: typeof databaseError?.code === "string" ? databaseError.code : undefined,
+      message: typeof databaseError?.message === "string" ? databaseError.message : "Unknown database error",
+    });
+    throw error;
+  }
   if (existing[0]?.disabled) throw new Error(existing[0].deletionPending ? "This account is being deleted." : "This account is disabled.");
   const values: InsertUser = { openId: user.openId };
   const updateSet: Record<string, unknown> = {};
