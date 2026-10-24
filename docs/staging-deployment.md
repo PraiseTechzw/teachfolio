@@ -20,7 +20,7 @@ Set application values only in the staging service's secret/environment settings
 | --- | --- |
 | `NODE_ENV` | Set to `production` so secure cookie behavior is enabled. |
 | `PORT` | Set to `3000` to match the container port in `Dockerfile`. |
-| `DATABASE_URL` | Staging Supabase Postgres connection URL; require TLS with `sslmode=require` or stricter. |
+| `DATABASE_URL` | Staging Supabase **Session pooler** connection URL (shared pooler, port `5432`); require TLS with `sslmode=require` or stricter. |
 | `SUPABASE_URL` | Staging Supabase project URL using HTTPS. |
 | `SUPABASE_PUBLISHABLE_KEY` | Staging project's publishable key. |
 | `SUPABASE_SECRET_KEY` | Staging project's server-only secret key. Never use a browser key in this variable. |
@@ -31,6 +31,8 @@ Set application values only in the staging service's secret/environment settings
 | `RESEND_FROM_EMAIL` | Sender identity on a domain verified in Resend, such as `Teachfolio <noreply@your-domain.example>`. |
 
 Do not add values to `render.yaml`, Docker build arguments, source control, or logs. The blueprint marks project/database keys as host-entered secrets and disables automatic deployment. It intentionally has no migration/seed hook. Set `NODE_ENV`, `PORT`, bucket, and a generated session secret in the blueprint; enter the staging-only database and Supabase keys in the host dashboard.
+
+For Render, copy the database URL from Supabase **Connect → Session pooler**. Render does not support IPv6, while a Supabase direct database URL can resolve only to IPv6; that fails with `ENETUNREACH` before Postgres receives the query. The shared Session pooler is IPv4-compatible and uses port `5432` with a username in the form `postgres.<project-ref>`. Copy the complete URL from the dashboard, replace only its password placeholder, and keep it in Render's secret environment settings. Do not construct the pooler hostname or reuse the direct connection username.
 
 ### External service setup
 
