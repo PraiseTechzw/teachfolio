@@ -77,6 +77,21 @@ export async function resendSignupConfirmation(email: string, redirectTo: string
   if (error) throw error;
 }
 
+/** Server-only account deletion; never expose the service role key to clients. */
+export async function deleteSupabaseIdentity(userId: string) {
+  const serviceRoleKey = ENV.supabaseSecretKey.trim();
+  if (!ENV.supabaseUrl || !serviceRoleKey)
+    throw new Error("Secure account deletion requires the server-only Supabase secret key.");
+  const adminClient = createClient(ENV.supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+  const { error: lookupError } = await adminClient.auth.admin.getUserById(userId);
+  if (lookupError && (lookupError as { status?: number }).status === 404) return;
+  if (lookupError) throw new Error("The identity provider could not verify this account for deletion.");
+  const { error } = await adminClient.auth.admin.deleteUser(userId);
+  if (error) throw new Error("The identity provider could not delete this account. The account is disabled and can be retried.");
+}
+
 export async function changePassword(accessToken: string, refreshToken: string, password: string, req: Request, res: Response) {
   const client = authClient();
   const { data: sessionData, error: sessionError } = await client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });

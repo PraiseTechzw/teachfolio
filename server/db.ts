@@ -21,9 +21,12 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
+  const existing = await db.select({ disabled: users.disabled, deletionPending: users.deletionPending, name: users.name }).from(users).where(eq(users.openId, user.openId)).limit(1);
+  if (existing[0]?.disabled) throw new Error(existing[0].deletionPending ? "This account is being deleted." : "This account is disabled.");
   const values: InsertUser = { openId: user.openId };
   const updateSet: Record<string, unknown> = {};
   for (const field of ["name", "email", "phone", "emailVerified", "loginMethod"] as const) {
+    if (field === "name" && existing[0]?.name) continue;
     if (user[field] !== undefined) { Object.assign(values, { [field]: user[field] ?? null }); updateSet[field] = user[field] ?? null; }
   }
   if (user.lastSignedIn !== undefined) { values.lastSignedIn = user.lastSignedIn; updateSet.lastSignedIn = user.lastSignedIn; }

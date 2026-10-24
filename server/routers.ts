@@ -54,6 +54,7 @@ import { sameOriginUrl } from "./_core/request-origin";
 import {
   changePassword,
   clearAuthCookies,
+  deleteSupabaseIdentity,
   establishSupabaseSession,
   REFRESH_COOKIE,
   registerAccount,
@@ -85,6 +86,11 @@ const inviteTokenSchema = z
   .string()
   .regex(/^[A-Za-z0-9_-]{20,256}$/)
   .optional();
+const accountHasActiveAssignment = sql`EXISTS (SELECT 1 FROM access_assignments AS aa WHERE aa."userId" = ${users.id} AND aa.status = 'active')`;
+const accountHasSuspendedAssignment = sql`EXISTS (SELECT 1 FROM access_assignments AS aa WHERE aa."userId" = ${users.id} AND aa.status = 'suspended')`;
+const activeAccountCondition = sql`${users.disabled} = false AND ${users.emailVerified} = true AND ${accountHasActiveAssignment}`;
+const suspendedAccountCondition = sql`${users.disabled} = true OR (NOT ${accountHasActiveAssignment} AND ${accountHasSuspendedAssignment})`;
+const pendingAccountCondition = sql`${users.disabled} = false AND (${users.emailVerified} = false OR (NOT ${accountHasActiveAssignment} AND NOT ${accountHasSuspendedAssignment}))`;
 function authRedirectUrl(origin: string, inviteToken?: string) {
   const url = new URL("/", origin);
   if (inviteToken) url.searchParams.set("invite", inviteToken);
@@ -447,6 +453,7 @@ const appRouter = router({
       const database = await db.getDb();
       if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       await database.update(users).set({ name: input.name }).where(eq(users.id, ctx.user.id));
+      await db.writeAudit({ institutionId: ctx.appAccess.institutionId, actorUserId: ctx.user.id, action: "profile_name_updated", targetType: "user", targetId: String(ctx.user.id), detail: "Display name changed by account owner." });
       return { success: true };
     }),
     preferences: applicationProcedure.query(async ({ ctx }) => {
@@ -1830,9 +1837,9 @@ const appRouter = router({
         database.select({ total: count() }).from(portfolioEntries).where(inArray(portfolioEntries.status, ["submitted", "under_review", "resubmitted"])),
         database.select({ total: count() }).from(reviews),
         database.select({ total: count(), bytes: sql<number>`coalesce(sum(${evidenceFiles.byteSize}), 0)` }).from(evidenceFiles),
-        database.select({ total: countDistinct(users.id) }).from(users).innerJoin(accessAssignments, eq(accessAssignments.userId, users.id)).where(and(eq(users.disabled, false), eq(users.emailVerified, true), eq(accessAssignments.status, "active"))),
-        database.select({ total: countDistinct(users.id) }).from(users).leftJoin(accessAssignments, eq(accessAssignments.userId, users.id)).where(or(eq(users.emailVerified, false), eq(accessAssignments.status, "pending"), isNull(accessAssignments.id))),
-        database.select({ total: countDistinct(users.id) }).from(users).leftJoin(accessAssignments, eq(accessAssignments.userId, users.id)).where(or(eq(users.disabled, true), eq(accessAssignments.status, "suspended"))),
+        database.select({ total: count() }).from(users).where(activeAccountCondition),
+        database.select({ total: count() }).from(users).where(pendingAccountCondition),
+        database.select({ total: count() }).from(users).where(suspendedAccountCondition),
       ]);
       return { users: Number(userRows[0]?.total ?? 0), activeAssignments: Number(assignmentRows[0]?.total ?? 0), activeUsers: Number(activeUserRows[0]?.total ?? 0), pendingUsers: Number(pendingUserRows[0]?.total ?? 0), suspendedUsers: Number(suspendedUserRows[0]?.total ?? 0), pendingInvitations: Number(invitationRows[0]?.total ?? 0), pendingSubmissions: Number(entryRows[0]?.total ?? 0), reviews: Number(reviewRows[0]?.total ?? 0), evidenceFiles: Number(fileRows[0]?.total ?? 0), evidenceBytes: Number(fileRows[0]?.bytes ?? 0) };
     }),
@@ -1859,8 +1866,8 @@ const appRouter = router({
         input.role ? eq(accessAssignments.role, input.role) : undefined,
         input.verified === "verified" ? eq(users.emailVerified, true) : input.verified === "unverified" ? eq(users.emailVerified, false) : undefined,
         input.status === "active" ? and(eq(users.disabled, false), eq(accessAssignments.status, "active"), eq(users.emailVerified, true)) : undefined,
-        input.status === "pending" ? or(eq(accessAssignments.status, "pending"), eq(users.emailVerified, false)) : undefined,
-        input.status === "suspended" ? or(eq(users.disabled, true), eq(accessAssignments.status, "suspended")) : undefined,
+        input.status === "pending" ? pendingAccountCondition : undefined,
+        input.status === "suspended" ? suspendedAccountCondition : undefined,
         input.registeredFrom ? sql`${users.createdAt} >= ${new Date(`${input.registeredFrom}T00:00:00.000Z`)}` : undefined,
         input.registeredTo ? sql`${users.createdAt} < ${new Date(`${input.registeredTo}T23:59:59.999Z`)}` : undefined,
       ];
@@ -1873,16 +1880,16 @@ const appRouter = router({
       const rows = pageRows.map(user => ({ ...user, assignments: assignmentRows.filter(assignment => assignment.userId === user.userId) }));
       const totals = await Promise.all([
         database.select({ total: count() }).from(users),
-        database.select({ total: countDistinct(users.id) }).from(users).innerJoin(accessAssignments, eq(accessAssignments.userId, users.id)).where(and(eq(users.disabled, false), eq(users.emailVerified, true), eq(accessAssignments.status, "active"))),
-        database.select({ total: countDistinct(users.id) }).from(users).leftJoin(accessAssignments, eq(accessAssignments.userId, users.id)).where(or(eq(users.emailVerified, false), eq(accessAssignments.status, "pending"))),
-        database.select({ total: countDistinct(users.id) }).from(users).leftJoin(accessAssignments, eq(accessAssignments.userId, users.id)).where(or(eq(users.disabled, true), eq(accessAssignments.status, "suspended"))),
+        database.select({ total: count() }).from(users).where(activeAccountCondition),
+        database.select({ total: count() }).from(users).where(pendingAccountCondition),
+        database.select({ total: count() }).from(users).where(suspendedAccountCondition),
       ]);
       return { rows, total: Number(totalRows[0]?.total ?? 0), page: input.page, pageSize: input.pageSize, pages: Math.ceil(Number(totalRows[0]?.total ?? 0) / input.pageSize), metrics: { all: Number(totals[0][0]?.total ?? 0), active: Number(totals[1][0]?.total ?? 0), pending: Number(totals[2][0]?.total ?? 0), suspended: Number(totals[3][0]?.total ?? 0) } };
     }),
     platformUserDetails: requireRoles("platform_admin").input(z.object({ userId: z.number().int().positive() })).query(async ({ input }) => {
       const database = await db.getDb();
       if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
-      const accountRows = await database.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, emailVerified: users.emailVerified, disabled: users.disabled, createdAt: users.createdAt, lastSignedIn: users.lastSignedIn }).from(users).where(eq(users.id, input.userId)).limit(1);
+      const accountRows = await database.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, emailVerified: users.emailVerified, disabled: users.disabled, deletionPending: users.deletionPending, createdAt: users.createdAt, lastSignedIn: users.lastSignedIn }).from(users).where(eq(users.id, input.userId)).limit(1);
       const account = accountRows[0];
       if (!account) throw new TRPCError({ code: "NOT_FOUND" });
       const [assignments, activity, linked] = await Promise.all([
@@ -1899,8 +1906,48 @@ const appRouter = router({
       if (!target[0]) throw new TRPCError({ code: "NOT_FOUND" });
       const isPlatformAdmin = await database.select({ id: accessAssignments.id }).from(accessAssignments).where(and(eq(accessAssignments.userId, input.userId), eq(accessAssignments.role, "platform_admin"))).limit(1);
       if (isPlatformAdmin.length) throw new TRPCError({ code: "FORBIDDEN", message: "Platform administrator accounts can only be managed through the secured provisioning process." });
+      if (input.status === "suspended") {
+        const adminAssignments = await database.select({ institutionId: accessAssignments.institutionId }).from(accessAssignments).where(and(eq(accessAssignments.userId, input.userId), eq(accessAssignments.role, "institution_admin"), eq(accessAssignments.status, "active")));
+        for (const row of adminAssignments) {
+          if (row.institutionId === null) continue;
+          const admins = await database.select({ total: count() }).from(accessAssignments).where(and(eq(accessAssignments.institutionId, row.institutionId), eq(accessAssignments.role, "institution_admin"), eq(accessAssignments.status, "active")));
+          if (Number(admins[0]?.total ?? 0) <= 1) throw new TRPCError({ code: "CONFLICT", message: "Assign another active institution administrator before suspending this account." });
+        }
+      }
       await database.update(users).set({ disabled: input.status === "suspended" }).where(eq(users.id, input.userId));
       await db.writeAudit({ institutionId: null, actorUserId: ctx.user.id, action: input.status === "suspended" ? "platform_user_suspended" : "platform_user_reactivated", targetType: "user", targetId: String(input.userId), detail: input.reason });
+      return { success: true };
+    }),
+    deletePlatformUser: requireRoles("platform_admin").input(z.object({ userId: z.number().int().positive(), confirmation: z.string().trim().min(1).max(320), reason: z.string().trim().min(5).max(500) })).mutation(async ({ ctx, input }) => {
+      if (input.userId === ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "You cannot delete your own account." });
+      const database = await db.getDb();
+      if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+      const rows = await database.select({ openId: users.openId, email: users.email, deletionPending: users.deletionPending }).from(users).where(eq(users.id, input.userId)).limit(1);
+      const target = rows[0];
+      if (!target) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!target.email && !target.deletionPending) throw new TRPCError({ code: "CONFLICT", message: "This account has no email identity to verify for deletion." });
+      const platformRole = await database.select({ id: accessAssignments.id }).from(accessAssignments).where(and(eq(accessAssignments.userId, input.userId), eq(accessAssignments.role, "platform_admin"))).limit(1);
+      if (platformRole.length) throw new TRPCError({ code: "FORBIDDEN", message: "Platform administrator accounts must be removed through the secured provisioning process." });
+      const expected = target.email?.toLowerCase() ?? `delete ${input.userId}`;
+      if (input.confirmation.trim().toLowerCase() !== expected) throw new TRPCError({ code: "BAD_REQUEST", message: "Confirmation did not match the account email or required deletion code." });
+      const adminAssignments = await database.select({ institutionId: accessAssignments.institutionId }).from(accessAssignments).where(and(eq(accessAssignments.userId, input.userId), eq(accessAssignments.role, "institution_admin"), eq(accessAssignments.status, "active")));
+      for (const row of adminAssignments) {
+        if (row.institutionId === null) continue;
+        const admins = await database.select({ total: count() }).from(accessAssignments).where(and(eq(accessAssignments.institutionId, row.institutionId), eq(accessAssignments.role, "institution_admin"), eq(accessAssignments.status, "active")));
+        if (Number(admins[0]?.total ?? 0) <= 1) throw new TRPCError({ code: "CONFLICT", message: "Assign another active institution administrator before deleting this account." });
+      }
+      await database.transaction(async tx => {
+        await tx.update(users).set({ disabled: true, deletionPending: true, name: null, email: null, phone: null, emailVerified: false }).where(eq(users.id, input.userId));
+        await tx.update(accessAssignments).set({ status: "suspended" }).where(eq(accessAssignments.userId, input.userId));
+        await tx.insert(auditLogs).values({ institutionId: null, actorUserId: ctx.user.id, action: "platform_user_deletion_started", targetType: "user", targetId: String(input.userId), detail: input.reason });
+      });
+      try {
+        await deleteSupabaseIdentity(target.openId);
+      } catch (error) {
+        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: error instanceof Error ? error.message : "Identity deletion failed. The anonymized account is disabled and can be retried." });
+      }
+      await database.update(users).set({ openId: `deleted-${input.userId}`, loginMethod: "deleted", deletionPending: false }).where(eq(users.id, input.userId));
+      await db.writeAudit({ institutionId: null, actorUserId: ctx.user.id, action: "platform_user_deleted", targetType: "user", targetId: String(input.userId), detail: input.reason });
       return { success: true };
     }),
     changePlatformRole: requireRoles("platform_admin").input(z.object({ assignmentId: z.number().int().positive(), role: z.enum(["student_teacher", "supervisor", "lecturer", "coordinator", "institution_admin"]), reason: z.string().trim().min(5).max(500) })).mutation(async ({ ctx, input }) => {
@@ -1948,12 +1995,16 @@ const appRouter = router({
       await db.writeAudit({ institutionId: null, actorUserId: ctx.user.id, action: input.action === "password_reset" ? "platform_password_reset_requested" : "platform_email_verification_resent", targetType: "user", targetId: String(input.userId), detail: "Recovery email requested by platform administrator." });
       return { success: true };
     }),
-    exportPlatformUsers: requireRoles("platform_admin").input(z.object({ search: z.string().trim().max(120).default("") }).default({ search: "" })).query(async ({ input }) => {
+    exportPlatformUsers: requireRoles("platform_admin").input(z.object({ search: z.string().trim().max(120).default(""), role: z.enum(["student_teacher", "supervisor", "lecturer", "coordinator", "institution_admin", "platform_admin"]).optional(), status: z.enum(["active", "pending", "suspended"]).optional(), verified: z.enum(["all", "verified", "unverified"]).default("all"), registeredFrom: z.string().date().optional(), registeredTo: z.string().date().optional() }).default({ search: "", verified: "all" })).query(async ({ input }) => {
       const database = await db.getDb();
       if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const term = `%${input.search.toLowerCase()}%`;
-      const rows = await database.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, emailVerified: users.emailVerified, disabled: users.disabled, createdAt: users.createdAt, lastSignedIn: users.lastSignedIn }).from(users).where(input.search ? sql`(lower(coalesce(${users.name}, '')) LIKE ${term} OR lower(coalesce(${users.email}, '')) LIKE ${term} OR lower(coalesce(${users.phone}, '')) LIKE ${term} OR cast(${users.id} as text) LIKE ${term})` : undefined).orderBy(desc(users.createdAt)).limit(5000);
-      return ["user_id,name,email,phone,email_verified,disabled,created_at,last_sign_in", ...rows.map(row => [row.id, row.name, row.email, row.phone, row.emailVerified, row.disabled, row.createdAt.toISOString(), row.lastSignedIn.toISOString()].map(value => csvCell(value)).join(","))].join("\n");
+      const where = and(input.search ? sql`(lower(coalesce(${users.name}, '')) LIKE ${term} OR lower(coalesce(${users.email}, '')) LIKE ${term} OR lower(coalesce(${users.phone}, '')) LIKE ${term} OR cast(${users.id} as text) LIKE ${term})` : undefined, input.role ? eq(accessAssignments.role, input.role) : undefined, input.verified === "verified" ? eq(users.emailVerified, true) : input.verified === "unverified" ? eq(users.emailVerified, false) : undefined, input.status === "active" ? and(eq(users.disabled, false), eq(users.emailVerified, true), eq(accessAssignments.status, "active")) : undefined, input.status === "pending" ? pendingAccountCondition : undefined, input.status === "suspended" ? suspendedAccountCondition : undefined, input.registeredFrom ? sql`${users.createdAt} >= ${new Date(`${input.registeredFrom}T00:00:00.000Z`)}` : undefined, input.registeredTo ? sql`${users.createdAt} < ${new Date(`${input.registeredTo}T23:59:59.999Z`)}` : undefined);
+      const idRows = await database.selectDistinct({ id: users.id }).from(users).leftJoin(accessAssignments, eq(accessAssignments.userId, users.id)).where(where).orderBy(desc(users.id)).limit(5000);
+      const ids = idRows.map(row => row.id);
+      const rows = ids.length ? await database.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, emailVerified: users.emailVerified, disabled: users.disabled, createdAt: users.createdAt, lastSignedIn: users.lastSignedIn }).from(users).where(inArray(users.id, ids)).orderBy(desc(users.createdAt)) : [];
+      const assignments = ids.length ? await database.select({ userId: accessAssignments.userId, role: accessAssignments.role, status: accessAssignments.status, institutionName: institutions.name }).from(accessAssignments).leftJoin(institutions, eq(accessAssignments.institutionId, institutions.id)).where(inArray(accessAssignments.userId, ids)) : [];
+      return ["user_id,name,email,phone,email_verified,disabled,created_at,last_sign_in,roles_and_institutions", ...rows.map(row => [row.id, row.name, row.email, row.phone, row.emailVerified, row.disabled, row.createdAt.toISOString(), row.lastSignedIn.toISOString(), assignments.filter(item => item.userId === row.id).map(item => `${item.institutionName ?? "Platform"}: ${item.role} (${item.status})`).join("; ")].map(value => csvCell(value)).join(","))].join("\n");
     }),
     setPlatformAssignmentStatus: requireRoles("platform_admin").input(z.object({ assignmentId: z.number().int().positive(), status: z.enum(["active", "suspended"]) })).mutation(async ({ ctx, input }) => {
       const database = await db.getDb();

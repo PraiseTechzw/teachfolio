@@ -1,7 +1,8 @@
 ALTER TABLE public.users
   ADD COLUMN IF NOT EXISTS phone varchar(40),
   ADD COLUMN IF NOT EXISTS "emailVerified" boolean NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS disabled boolean NOT NULL DEFAULT false;
+  ADD COLUMN IF NOT EXISTS disabled boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "deletionPending" boolean NOT NULL DEFAULT false;
 ALTER TABLE public.institutions
   ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false;
 

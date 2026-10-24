@@ -26,6 +26,7 @@ export const users = pgTable("users", {
   phone: varchar("phone", { length: 40 }),
   emailVerified: boolean("emailVerified").default(false).notNull(),
   disabled: boolean("disabled").default(false).notNull(),
+  deletionPending: boolean("deletionPending").default(false).notNull(),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: legacyUserRole("role").default("user").notNull(),
   createdAt: createdAt(),
