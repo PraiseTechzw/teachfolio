@@ -3,7 +3,7 @@ services:
     name: teachfolio-staging
     runtime: docker
     region: frankfurt
-    plan: 0.5c-512mb
+    plan: free
     autoDeployTrigger: "off"
     healthCheckPath: /api/ready
     maxShutdownDelaySeconds: 60
