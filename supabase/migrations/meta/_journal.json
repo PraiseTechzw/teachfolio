@@ -15,6 +15,13 @@
       "when": 1792742400000,
       "tag": "0001_private_evidence_bucket",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792742400001,
+      "tag": "0002_platform_user_management",
+      "breakpoints": true
     }
   ]
 }

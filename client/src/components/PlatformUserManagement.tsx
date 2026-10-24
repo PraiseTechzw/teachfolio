@@ -2,15 +2,24 @@ import { useEffect, useState } from "react";
 import { Download, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
-const roles = ["student_teacher", "supervisor", "lecturer", "coordinator", "institution_admin"] as const;
+const roles = [
+  "student_teacher",
+  "supervisor",
+  "lecturer",
+  "coordinator",
+  "institution_admin",
+] as const;
 const roleLabel = (value: string) => value.replaceAll("_", " ");
 const rolePermissions: Record<string, string> = {
-  student_teacher: "Own portfolio records, evidence, submissions, and feedback.",
+  student_teacher:
+    "Own portfolio records, evidence, submissions, and feedback.",
   supervisor: "Review assigned student portfolios and submit assessments.",
   lecturer: "Review assigned student portfolios and submit assessments.",
   coordinator: "Manage placements and requirements; view institution reports.",
-  institution_admin: "Manage institution accounts, assignments, settings, and audit activity.",
-  platform_admin: "Manage institutions, platform users, platform settings, and platform audit records.",
+  institution_admin:
+    "Manage institution accounts, assignments, settings, and audit activity.",
+  platform_admin:
+    "Manage institutions, platform users, platform settings, and platform audit records.",
 };
 
 export default function PlatformUserManagement() {
@@ -21,77 +30,876 @@ export default function PlatformUserManagement() {
   const [verified, setVerified] = useState("all");
   const [registeredFrom, setRegisteredFrom] = useState("");
   const [registeredTo, setRegisteredTo] = useState("");
-  const [sort, setSort] = useState<"newest" | "oldest" | "last_sign_in">("newest");
+  const [sort, setSort] = useState<"newest" | "oldest" | "last_sign_in">(
+    "newest"
+  );
   const [selectedId, setSelectedId] = useState<number>();
   const [reason, setReason] = useState("");
-  const [roleDrafts, setRoleDrafts] = useState<Record<number, typeof roles[number]>>({});
+  const [roleDrafts, setRoleDrafts] = useState<
+    Record<number, (typeof roles)[number]>
+  >({});
   const [newInstitutionId, setNewInstitutionId] = useState("");
-  const [newRole, setNewRole] = useState<typeof roles[number]>("student_teacher");
+  const [newRole, setNewRole] =
+    useState<(typeof roles)[number]>("student_teacher");
   const [notice, setNotice] = useState("");
   const [expiryDays, setExpiryDays] = useState(7);
   const [evidenceMiB, setEvidenceMiB] = useState(25);
   const utils = trpc.useUtils();
-  const usersQuery = trpc.admin.platformUsers.useQuery({ page, pageSize: 25, search, role: role ? role as typeof roles[number] | "platform_admin" : undefined, status: status ? status as "active" | "pending" | "suspended" : undefined, verified: verified as "all" | "verified" | "unverified", registeredFrom: registeredFrom || undefined, registeredTo: registeredTo || undefined, sort });
-  const selected = trpc.admin.platformUserDetails.useQuery({ userId: selectedId ?? 0 }, { enabled: selectedId !== undefined });
+  const usersQuery = trpc.admin.platformUsers.useQuery({
+    page,
+    pageSize: 25,
+    search,
+    role: role
+      ? (role as (typeof roles)[number] | "platform_admin")
+      : undefined,
+    status: status
+      ? (status as "active" | "pending" | "suspended" | "deleted")
+      : undefined,
+    verified: verified as "all" | "verified" | "unverified",
+    registeredFrom: registeredFrom || undefined,
+    registeredTo: registeredTo || undefined,
+    sort,
+  });
+  const selected = trpc.admin.platformUserDetails.useQuery(
+    { userId: selectedId ?? 0 },
+    { enabled: selectedId !== undefined }
+  );
   const institutions = trpc.admin.institutions.useQuery(undefined);
   const configuration = trpc.admin.platformConfiguration.useQuery();
-  useEffect(() => { if (configuration.data) { setExpiryDays(configuration.data.invitationExpiryDays); setEvidenceMiB(configuration.data.maxEvidenceMiB); } }, [configuration.data]);
-  const refresh = async () => { await Promise.all([utils.admin.platformUsers.invalidate(), utils.admin.platformUserDetails.invalidate(), utils.admin.platformSummary.invalidate()]); };
-  const statusMutation = trpc.admin.setPlatformUserStatus.useMutation({ onSuccess: async () => { setReason(""); setNotice("Account access status updated and recorded."); await refresh(); } });
-  const roleMutation = trpc.admin.changePlatformRole.useMutation({ onSuccess: async () => { setReason(""); setNotice("Role updated and recorded."); await refresh(); } });
-  const assignRole = trpc.admin.assignPlatformRole.useMutation({ onSuccess: async result => { setReason(""); setNotice(result.status === "active" ? "Institution administrator role assigned and activated." : "Role assignment created as pending institution activation."); await refresh(); } });
-  const recoveryMutation = trpc.admin.platformUserRecovery.useMutation({ onSuccess: () => setNotice("Recovery email request accepted.") });
-  const deleteAccount = trpc.admin.deletePlatformUser.useMutation({ onSuccess: async () => { setNotice("Account identity permanently deleted. Portfolio and audit references were retained with an anonymized user record."); await refresh(); await utils.admin.platformUsers.invalidate(); }, onError: async () => { await refresh(); } });
-  const configMutation = trpc.admin.updatePlatformConfiguration.useMutation({ onSuccess: async () => { setNotice("Platform configuration saved."); await utils.admin.platformConfiguration.invalidate(); } });
-  const exportUsers = trpc.admin.exportPlatformUsers.useQuery({ search, role: role ? role as typeof roles[number] | "platform_admin" : undefined, status: status ? status as "active" | "pending" | "suspended" : undefined, verified: verified as "all" | "verified" | "unverified", registeredFrom: registeredFrom || undefined, registeredTo: registeredTo || undefined }, { enabled: false });
+  useEffect(() => {
+    if (configuration.data) {
+      setExpiryDays(configuration.data.invitationExpiryDays);
+      setEvidenceMiB(configuration.data.maxEvidenceMiB);
+    }
+  }, [configuration.data]);
+  const refresh = async () => {
+    await Promise.all([
+      utils.admin.platformUsers.invalidate(),
+      utils.admin.platformUserDetails.invalidate(),
+      utils.admin.platformSummary.invalidate(),
+    ]);
+  };
+  const statusMutation = trpc.admin.setPlatformUserStatus.useMutation({
+    onSuccess: async () => {
+      setReason("");
+      setNotice("Account access status updated and recorded.");
+      await refresh();
+    },
+  });
+  const roleMutation = trpc.admin.changePlatformRole.useMutation({
+    onSuccess: async () => {
+      setReason("");
+      setNotice("Role updated and recorded.");
+      await refresh();
+    },
+  });
+  const assignRole = trpc.admin.assignPlatformRole.useMutation({
+    onSuccess: async result => {
+      setReason("");
+      setNotice(
+        result.status === "active"
+          ? "Institution administrator role assigned and activated."
+          : "Role assignment created as pending institution activation."
+      );
+      await refresh();
+    },
+  });
+  const recoveryMutation = trpc.admin.platformUserRecovery.useMutation({
+    onSuccess: () => setNotice("Recovery email request accepted."),
+  });
+  const deleteAccount = trpc.admin.deletePlatformUser.useMutation({
+    onSuccess: async () => {
+      setNotice(
+        "Identity-provider account and direct profile data deleted. Linked academic and audit history was retained."
+      );
+      await refresh();
+      await utils.admin.platformUsers.invalidate();
+    },
+    onError: async () => {
+      await refresh();
+    },
+  });
+  const configMutation = trpc.admin.updatePlatformConfiguration.useMutation({
+    onSuccess: async () => {
+      setNotice("Platform configuration saved.");
+      await utils.admin.platformConfiguration.invalidate();
+    },
+  });
+  const exportUsers = trpc.admin.exportPlatformUsers.useQuery(
+    {
+      search,
+      role: role
+        ? (role as (typeof roles)[number] | "platform_admin")
+        : undefined,
+      status: status
+        ? (status as "active" | "pending" | "suspended" | "deleted")
+        : undefined,
+      verified: verified as "all" | "verified" | "unverified",
+      registeredFrom: registeredFrom || undefined,
+      registeredTo: registeredTo || undefined,
+    },
+    { enabled: false }
+  );
   const data = usersQuery.data;
   const exportCsv = async () => {
     const csv = await exportUsers.refetch();
     if (!csv.data) return;
-    const url = URL.createObjectURL(new Blob([csv.data], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a"); link.href = url; link.download = "platform-users.csv"; link.click(); URL.revokeObjectURL(url);
+    const url = URL.createObjectURL(
+      new Blob([csv.data], { type: "text/csv;charset=utf-8" })
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "platform-users.csv";
+    link.click();
+    URL.revokeObjectURL(url);
   };
   const applyStatus = (userId: number, next: "active" | "suspended") => {
-    if (reason.trim().length < 5) { setNotice("Enter a reason of at least 5 characters before changing account status."); return; }
+    if (reason.trim().length < 5) {
+      setNotice(
+        "Enter a reason of at least 5 characters before changing account status."
+      );
+      return;
+    }
     statusMutation.mutate({ userId, status: next, reason: reason.trim() });
   };
-  const applyRole = (assignmentId: number, nextRole: typeof roles[number]) => {
-    if (reason.trim().length < 5) { setNotice("Enter a reason of at least 5 characters before changing a role."); return; }
-    roleMutation.mutate({ assignmentId, role: nextRole, reason: reason.trim() });
+  const applyRole = (
+    assignmentId: number,
+    nextRole: (typeof roles)[number]
+  ) => {
+    if (reason.trim().length < 5) {
+      setNotice(
+        "Enter a reason of at least 5 characters before changing a role."
+      );
+      return;
+    }
+    roleMutation.mutate({
+      assignmentId,
+      role: nextRole,
+      reason: reason.trim(),
+    });
   };
-  const pending = statusMutation.isPending || roleMutation.isPending || assignRole.isPending || recoveryMutation.isPending || deleteAccount.isPending;
+  const pending =
+    statusMutation.isPending ||
+    roleMutation.isPending ||
+    assignRole.isPending ||
+    recoveryMutation.isPending ||
+    deleteAccount.isPending;
 
-  return <div className="space-y-5">
-    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-indigo-600">Platform administration</p><h1 className="mt-2 text-2xl font-semibold">User management</h1><p className="mt-2 max-w-3xl text-sm text-slate-500">Search registered accounts, inspect access and history, update institution roles, and control account access. Super-admin assignments are protected from this screen.</p></div><button onClick={() => void exportCsv()} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><Download size={15}/> Export matching users</button></header>
+  return (
+    <div className="space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-indigo-600">
+            Platform administration
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold">User management</h1>
+          <p className="mt-2 max-w-3xl text-sm text-slate-500">
+            Search registered accounts, inspect access and history, update
+            institution roles, and control account access. Super-admin
+            assignments are protected from this screen.
+          </p>
+        </div>
+        <button
+          onClick={() => void exportCsv()}
+          className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"
+        >
+          <Download size={15} /> Export matching users
+        </button>
+      </header>
 
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["All accounts", data?.metrics.all], ["Active", data?.metrics.active], ["Pending", data?.metrics.pending], ["Suspended", data?.metrics.suspended]].map(([label, value]) => <article key={String(label)} className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-2 text-2xl font-semibold">{usersQuery.isLoading ? "—" : value}</p></article>)}</section>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {[
+          ["All accounts", data?.metrics.all],
+          ["Active", data?.metrics.active],
+          ["Pending", data?.metrics.pending],
+          ["Suspended", data?.metrics.suspended],
+          ["Deleted", data?.metrics.deleted],
+        ].map(([label, value]) => (
+          <article
+            key={String(label)}
+            className="rounded-xl border bg-white p-4"
+          >
+            <p className="text-xs text-slate-500">{label}</p>
+            <p className="mt-2 text-2xl font-semibold">
+              {usersQuery.isLoading ? "—" : value}
+            </p>
+          </article>
+        ))}
+      </section>
 
-    <section className="rounded-2xl border bg-white p-4 sm:p-5"><h2 className="font-semibold">Platform defaults</h2><form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); configMutation.mutate({ invitationExpiryDays: expiryDays, maxEvidenceMiB: evidenceMiB }); }}><label className="text-xs font-semibold text-slate-600">Invitation expiry (1–30 days)<input className="mt-1 block h-10 w-44 rounded-lg border px-3 text-sm" type="number" min={1} max={30} value={expiryDays} onChange={event => setExpiryDays(Number(event.target.value))}/></label><label className="text-xs font-semibold text-slate-600">Evidence upload cap (1–25 MiB)<input className="mt-1 block h-10 w-44 rounded-lg border px-3 text-sm" type="number" min={1} max={25} value={evidenceMiB} onChange={event => setEvidenceMiB(Number(event.target.value))}/></label><button disabled={configMutation.isPending} className="h-10 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white">Save settings</button><p className="basis-full text-xs text-slate-500">The private Supabase bucket remains capped at 25 MiB; this platform limit can lower the application upload cap.</p></form></section>
+      <section className="rounded-2xl border bg-white p-4 sm:p-5">
+        <h2 className="font-semibold">Platform defaults</h2>
+        <form
+          className="mt-3 flex flex-wrap items-end gap-3"
+          onSubmit={event => {
+            event.preventDefault();
+            configMutation.mutate({
+              invitationExpiryDays: expiryDays,
+              maxEvidenceMiB: evidenceMiB,
+            });
+          }}
+        >
+          <label className="text-xs font-semibold text-slate-600">
+            Invitation expiry (1–30 days)
+            <input
+              className="mt-1 block h-10 w-44 rounded-lg border px-3 text-sm"
+              type="number"
+              min={1}
+              max={30}
+              value={expiryDays}
+              onChange={event => setExpiryDays(Number(event.target.value))}
+            />
+          </label>
+          <label className="text-xs font-semibold text-slate-600">
+            Evidence upload cap (1–25 MiB)
+            <input
+              className="mt-1 block h-10 w-44 rounded-lg border px-3 text-sm"
+              type="number"
+              min={1}
+              max={25}
+              value={evidenceMiB}
+              onChange={event => setEvidenceMiB(Number(event.target.value))}
+            />
+          </label>
+          <button
+            disabled={configMutation.isPending}
+            className="h-10 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white"
+          >
+            Save settings
+          </button>
+          <p className="basis-full text-xs text-slate-500">
+            The private Supabase bucket remains capped at 25 MiB; this platform
+            limit can lower the application upload cap.
+          </p>
+        </form>
+      </section>
 
-    <section className="space-y-3 rounded-2xl border bg-slate-50/60 p-4">
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <label className="flex items-center gap-2 rounded-lg border bg-white px-3"><Search size={15}/><input className="h-10 min-w-0 flex-1 text-sm outline-none" placeholder="Name, email, phone, or ID" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }}/></label>
-        <select aria-label="Filter by role" className="h-10 rounded-lg border bg-white px-3 text-sm" value={role} onChange={event => { setRole(event.target.value); setPage(1); }}><option value="">All roles</option>{[...roles, "platform_admin"].map(item => <option key={item} value={item}>{roleLabel(item)}</option>)}</select>
-        <select aria-label="Filter by status" className="h-10 rounded-lg border bg-white px-3 text-sm" value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}><option value="">All statuses</option><option value="active">Active</option><option value="pending">Pending</option><option value="suspended">Suspended</option></select>
-        <select aria-label="Filter by email verification" className="h-10 rounded-lg border bg-white px-3 text-sm" value={verified} onChange={event => { setVerified(event.target.value); setPage(1); }}><option value="all">Any verification</option><option value="verified">Email verified</option><option value="unverified">Email unverified</option></select>
-        <label className="text-xs text-slate-600">Registered from<input className="mt-1 block h-10 w-full rounded-lg border bg-white px-3 text-sm" type="date" value={registeredFrom} onChange={event => { setRegisteredFrom(event.target.value); setPage(1); }}/></label>
-        <label className="text-xs text-slate-600">Registered to<input className="mt-1 block h-10 w-full rounded-lg border bg-white px-3 text-sm" type="date" value={registeredTo} onChange={event => { setRegisteredTo(event.target.value); setPage(1); }}/></label>
-        <select aria-label="Sort users" className="h-10 rounded-lg border bg-white px-3 text-sm" value={sort} onChange={event => { setSort(event.target.value as typeof sort); setPage(1); }}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="last_sign_in">Last sign in</option></select>
-      </div>
-      {usersQuery.error && <p role="alert" className="text-sm text-rose-700">{usersQuery.error.message}</p>}
-      {usersQuery.isLoading ? <p className="p-5 text-sm text-slate-500">Loading users…</p> : <div className="overflow-x-auto rounded-xl border bg-white"><table className="w-full min-w-[950px] text-left text-sm"><thead className="bg-slate-100 text-xs text-slate-500"><tr><th className="p-3">Account</th><th className="p-3">Verification</th><th className="p-3">Institution and roles</th><th className="p-3">Registered</th><th className="p-3">Last sign-in</th><th className="p-3">Status</th><th className="p-3">Details</th></tr></thead><tbody className="divide-y">{data?.rows.map(account => <tr key={account.userId}><td className="p-3"><span className="flex items-center gap-2"><UserRound size={16}/><span><b className="block">{account.name || "Unnamed account"}</b><span className="text-xs text-slate-500">{account.email || "No email"} · ID {account.userId}</span>{account.phone && <span className="block text-xs text-slate-500">{account.phone}</span>}</span></span></td><td className="p-3">{account.emailVerified ? "Verified" : "Unverified"}</td><td className="p-3">{account.assignments.length ? account.assignments.map(item => <div key={item.id} className="capitalize">{item.institutionName ?? "Platform"}: {roleLabel(item.role)} <span className="text-xs text-slate-400">({item.status})</span></div>) : "No access assignment"}</td><td className="p-3">{new Date(account.createdAt).toLocaleDateString()}</td><td className="p-3">{new Date(account.lastSignedIn).toLocaleDateString()}</td><td className="p-3">{account.disabled ? "Suspended" : account.assignments.some(item => item.status === "active") && account.emailVerified ? "Active" : "Pending"}</td><td className="p-3"><button onClick={() => { setSelectedId(account.userId); setNotice(""); }} className="rounded-lg border px-3 py-2 text-xs font-semibold">Open profile</button></td></tr>)}</tbody></table></div>}
-      <div className="flex items-center justify-between text-sm"><span className="text-slate-500">{data?.total ?? 0} accounts · page {data?.page ?? 1} of {Math.max(1, data?.pages ?? 1)}</span><div className="flex gap-2"><button disabled={page <= 1} onClick={() => setPage(value => value - 1)} className="rounded-lg border bg-white px-3 py-2 disabled:opacity-50">Previous</button><button disabled={!data || page >= data.pages} onClick={() => setPage(value => value + 1)} className="rounded-lg border bg-white px-3 py-2 disabled:opacity-50">Next</button></div></div>
-    </section>
+      <section className="space-y-3 rounded-2xl border bg-slate-50/60 p-4">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <label className="flex items-center gap-2 rounded-lg border bg-white px-3">
+            <Search size={15} />
+            <input
+              className="h-10 min-w-0 flex-1 text-sm outline-none"
+              placeholder="Name, email, phone, or ID"
+              value={search}
+              onChange={event => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
+          <select
+            aria-label="Filter by role"
+            className="h-10 rounded-lg border bg-white px-3 text-sm"
+            value={role}
+            onChange={event => {
+              setRole(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">All roles</option>
+            {[...roles, "platform_admin"].map(item => (
+              <option key={item} value={item}>
+                {roleLabel(item)}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Filter by status"
+            className="h-10 rounded-lg border bg-white px-3 text-sm"
+            value={status}
+            onChange={event => {
+              setStatus(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="pending">Pending</option>
+            <option value="suspended">Suspended</option>
+            <option value="deleted">Deleted</option>
+          </select>
+          <select
+            aria-label="Filter by email verification"
+            className="h-10 rounded-lg border bg-white px-3 text-sm"
+            value={verified}
+            onChange={event => {
+              setVerified(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="all">Any verification</option>
+            <option value="verified">Email verified</option>
+            <option value="unverified">Email unverified</option>
+          </select>
+          <label className="text-xs text-slate-600">
+            Registered from
+            <input
+              className="mt-1 block h-10 w-full rounded-lg border bg-white px-3 text-sm"
+              type="date"
+              value={registeredFrom}
+              onChange={event => {
+                setRegisteredFrom(event.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
+          <label className="text-xs text-slate-600">
+            Registered to
+            <input
+              className="mt-1 block h-10 w-full rounded-lg border bg-white px-3 text-sm"
+              type="date"
+              value={registeredTo}
+              onChange={event => {
+                setRegisteredTo(event.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
+          <select
+            aria-label="Sort users"
+            className="h-10 rounded-lg border bg-white px-3 text-sm"
+            value={sort}
+            onChange={event => {
+              setSort(event.target.value as typeof sort);
+              setPage(1);
+            }}
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="last_sign_in">Last sign in</option>
+          </select>
+        </div>
+        {usersQuery.error && (
+          <p role="alert" className="text-sm text-rose-700">
+            {usersQuery.error.message}
+          </p>
+        )}
+        {usersQuery.isLoading ? (
+          <p className="p-5 text-sm text-slate-500">Loading users…</p>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border bg-white">
+            <table className="w-full min-w-[950px] text-left text-sm">
+              <thead className="bg-slate-100 text-xs text-slate-500">
+                <tr>
+                  <th className="p-3">Account</th>
+                  <th className="p-3">Verification</th>
+                  <th className="p-3">Institution and roles</th>
+                  <th className="p-3">Registered</th>
+                  <th className="p-3">Last sign-in</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {data?.rows.map(account => (
+                  <tr key={account.userId}>
+                    <td className="p-3">
+                      <span className="flex items-center gap-2">
+                        <UserRound size={16} />
+                        <span>
+                          <b className="block">
+                            {account.name || "Unnamed account"}
+                          </b>
+                          <span className="text-xs text-slate-500">
+                            {account.email || "No email"} · ID {account.userId}
+                          </span>
+                          {account.phone && (
+                            <span className="block text-xs text-slate-500">
+                              {account.phone}
+                            </span>
+                          )}
+                        </span>
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      {account.deleted
+                        ? "Removed"
+                        : account.emailVerified
+                          ? "Verified"
+                          : "Unverified"}
+                    </td>
+                    <td className="p-3">
+                      {account.assignments.length
+                        ? account.assignments.map(item => (
+                            <div key={item.id} className="capitalize">
+                              {item.institutionName ?? "Platform"}:{" "}
+                              {roleLabel(item.role)}{" "}
+                              <span className="text-xs text-slate-400">
+                                ({item.status})
+                              </span>
+                            </div>
+                          ))
+                        : "No access assignment"}
+                    </td>
+                    <td className="p-3">
+                      {new Date(account.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="p-3">
+                      {new Date(account.lastSignedIn).toLocaleDateString()}
+                    </td>
+                    <td className="p-3">
+                      {account.deleted
+                        ? "Deleted"
+                        : account.disabled
+                          ? "Suspended"
+                          : account.assignments.some(
+                                item => item.status === "active"
+                              ) && account.emailVerified
+                            ? "Active"
+                            : "Pending"}
+                    </td>
+                    <td className="p-3">
+                      <button
+                        onClick={() => {
+                          setSelectedId(account.userId);
+                          setNotice("");
+                        }}
+                        className="rounded-lg border px-3 py-2 text-xs font-semibold"
+                      >
+                        Open profile
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-500">
+            {data?.total ?? 0} accounts · page {data?.page ?? 1} of{" "}
+            {Math.max(1, data?.pages ?? 1)}
+          </span>
+          <div className="flex gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(value => value - 1)}
+              className="rounded-lg border bg-white px-3 py-2 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              disabled={!data || page >= data.pages}
+              onClick={() => setPage(value => value + 1)}
+              className="rounded-lg border bg-white px-3 py-2 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      </section>
 
-    {notice && <p role="status" className="rounded-lg bg-indigo-50 p-3 text-sm text-indigo-900">{notice}</p>}
-    {(statusMutation.error || roleMutation.error || assignRole.error || recoveryMutation.error || deleteAccount.error || configMutation.error || exportUsers.error) && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{statusMutation.error?.message || roleMutation.error?.message || assignRole.error?.message || recoveryMutation.error?.message || deleteAccount.error?.message || configMutation.error?.message || exportUsers.error?.message}</p>}
+      {notice && (
+        <p
+          role="status"
+          className="rounded-lg bg-indigo-50 p-3 text-sm text-indigo-900"
+        >
+          {notice}
+        </p>
+      )}
+      {(statusMutation.error ||
+        roleMutation.error ||
+        assignRole.error ||
+        recoveryMutation.error ||
+        deleteAccount.error ||
+        configMutation.error ||
+        exportUsers.error) && (
+        <p
+          role="alert"
+          className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800"
+        >
+          {statusMutation.error?.message ||
+            roleMutation.error?.message ||
+            assignRole.error?.message ||
+            recoveryMutation.error?.message ||
+            deleteAccount.error?.message ||
+            configMutation.error?.message ||
+            exportUsers.error?.message}
+        </p>
+      )}
 
-    {selectedId !== undefined && <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40" role="dialog" aria-modal="true" aria-label="User profile"><section className="h-full w-full max-w-2xl overflow-y-auto bg-white p-5 shadow-2xl sm:p-7"><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-indigo-600">Account details</p><h2 className="mt-2 text-xl font-semibold">{selected.data?.name || "User profile"}</h2></div><button aria-label="Close profile" onClick={() => setSelectedId(undefined)} className="rounded-lg border p-2"><X size={17}/></button></div>
-      {selected.isLoading ? <p className="py-8 text-sm text-slate-500">Loading profile…</p> : selected.error ? <p role="alert" className="py-8 text-sm text-rose-700">{selected.error.message}</p> : selected.data && <div className="mt-5 space-y-5"><div className="grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2"><p className="text-sm">Email<br/><b>{selected.data.email || "—"}</b></p><p className="text-sm">Phone<br/><b>{selected.data.phone || "—"}</b></p><p className="text-sm">Email status<br/><b>{selected.data.emailVerified ? "Verified" : "Unverified"}</b></p><p className="text-sm">Account state<br/><b>{selected.data.disabled ? "Suspended" : "Enabled"}</b></p><p className="text-sm">Registered<br/><b>{new Date(selected.data.createdAt).toLocaleString()}</b></p><p className="text-sm">Last sign-in<br/><b>{new Date(selected.data.lastSignedIn).toLocaleString()}</b></p><p className="text-sm">Linked portfolio entries<br/><b>{selected.data.linkedEntries}</b></p></div>
-      <section><h3 className="font-semibold">Access, roles, and inherited permissions</h3>{selected.data.assignments.length ? <div className="mt-2 space-y-3">{selected.data.assignments.map(item => <div key={item.id} className="rounded-xl border p-3"><p className="text-sm font-semibold">{item.institutionName ?? `Institution ${item.institutionId}`} · <span className="capitalize">{roleLabel(item.role)}</span> · {item.status}</p><p className="mt-1 text-xs text-slate-500">{rolePermissions[item.role] ?? "No permissions description available."}</p>{item.role !== "platform_admin" && <div className="mt-2 flex flex-wrap items-end gap-2"><label className="text-xs text-slate-500">Change role<select disabled={pending} className="mt-1 block h-10 rounded-lg border bg-white px-3 text-sm capitalize" value={roleDrafts[item.id] ?? item.role as typeof roles[number]} onChange={event => setRoleDrafts(previous => ({ ...previous, [item.id]: event.target.value as typeof roles[number] }))}>{roles.map(option => <option key={option} value={option}>{roleLabel(option)}</option>)}</select></label>{(roleDrafts[item.id] ?? item.role) !== item.role && <button disabled={pending} onClick={() => applyRole(item.id, roleDrafts[item.id]!)} className="h-10 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white">Save role</button>}</div>}</div>)}</div> : <p className="mt-2 text-sm text-slate-500">No role assignments.</p>}
-      {!selected.data.assignments.some(item => item.role === "platform_admin") && <form className="mt-3 rounded-xl border border-dashed p-3" onSubmit={event => { event.preventDefault(); if (reason.trim().length < 5) { setNotice("Enter a reason of at least 5 characters before assigning a role."); return; } if (newInstitutionId) assignRole.mutate({ userId: selected.data!.id, institutionId: Number(newInstitutionId), role: newRole, reason: reason.trim() }); }}><h4 className="text-sm font-semibold">Assign institution role</h4><div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><select aria-label="Institution" required className="h-10 rounded-lg border bg-white px-3 text-sm" value={newInstitutionId} onChange={event => setNewInstitutionId(event.target.value)}><option value="">Choose institution</option>{institutions.data?.filter(row => row.active && !row.isDemo).map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select><select aria-label="New role" className="h-10 rounded-lg border bg-white px-3 text-sm capitalize" value={newRole} onChange={event => setNewRole(event.target.value as typeof roles[number])}>{roles.map(option => <option key={option} value={option}>{roleLabel(option)}</option>)}</select><button disabled={pending} className="h-10 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white">Assign role</button></div><p className="mt-2 text-xs text-slate-500">Standard roles await institution activation; an institution administrator role becomes active immediately. Platform-admin access can only be provisioned outside this dashboard.</p></form>}</section>
-      {selected.data.assignments.some(item => item.role === "platform_admin") ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Platform administrator privileges are provisioned outside this dashboard and cannot be changed here.</p> : <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4"><h3 className="font-semibold">Account controls</h3><label className="block text-xs font-semibold text-slate-600">Reason for status, role, or deletion action<textarea className="mt-1 block min-h-20 w-full rounded-lg border bg-white p-3 text-sm" value={reason} onChange={event => setReason(event.target.value)} minLength={5} maxLength={500} required/></label><div className="flex flex-wrap gap-2"><button disabled={pending || !selected.data.email || selected.data.deletionPending} onClick={() => applyStatus(selected.data!.id, selected.data!.disabled ? "active" : "suspended")} className="rounded-lg border bg-white px-3 py-2 text-sm font-semibold">{selected.data.deletionPending ? "Deletion pending" : selected.data.disabled ? "Reinstate account" : "Suspend account"}</button><button disabled={pending || !selected.data.email} onClick={() => recoveryMutation.mutate({ userId: selected.data!.id, action: "password_reset" })} className="rounded-lg border bg-white px-3 py-2 text-sm font-semibold">Send password reset</button>{!selected.data.emailVerified && !selected.data.deletionPending && <button disabled={pending || !selected.data.email} onClick={() => recoveryMutation.mutate({ userId: selected.data!.id, action: "email_verification" })} className="rounded-lg border bg-white px-3 py-2 text-sm font-semibold">Resend verification</button>}<button disabled={pending || selected.data.deletionPending === false && !selected.data.email} onClick={() => { const expected = selected.data!.email || `DELETE ${selected.data!.id}`; const confirmation = window.prompt(`This permanently deletes the identity-provider account and removes the user's name, email and phone from Teachfolio. Portfolio and audit history will remain anonymized. Type exactly: ${expected}`); if (confirmation === null) return; if (reason.trim().length < 5) { setNotice("Enter a reason before deletion."); return; } deleteAccount.mutate({ userId: selected.data!.id, confirmation, reason: reason.trim() }); }} className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700">{selected.data.deletionPending ? "Retry permanent deletion" : "Delete account"}</button><span className="inline-flex items-center gap-1 text-xs text-slate-600"><ShieldCheck size={14}/> Reason and action recorded</span></div><p className="text-xs leading-5 text-slate-600">Suspension disables Teachfolio access. Permanent deletion removes the identity-provider account and direct profile data, while preserving linked academic records and audit history against an anonymized user record. A server-only Supabase secret key is required; failed provider deletion leaves a disabled, anonymized account that can be retried.</p></section>}
-      <section><h3 className="font-semibold">Account activity</h3><div className="mt-2 divide-y rounded-xl border">{selected.data.activity.length ? selected.data.activity.map(event => <article key={event.id} className="p-3"><p className="text-sm font-semibold capitalize">{event.action.replaceAll("_", " ")}</p><p className="mt-1 text-xs text-slate-500">{event.detail || event.targetType} · {new Date(event.createdAt).toLocaleString()}</p></article>) : <p className="p-4 text-sm text-slate-500">No user-targeted audit events.</p>}</div></section></div>}
-      </section></div>}
-  </div>;
+      {selectedId !== undefined && (
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-slate-950/40"
+          role="dialog"
+          aria-modal="true"
+          aria-label="User profile"
+        >
+          <section className="h-full w-full max-w-2xl overflow-y-auto bg-white p-5 shadow-2xl sm:p-7">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-indigo-600">
+                  Account details
+                </p>
+                <h2 className="mt-2 text-xl font-semibold">
+                  {selected.data?.name || "User profile"}
+                </h2>
+              </div>
+              <button
+                aria-label="Close profile"
+                onClick={() => setSelectedId(undefined)}
+                className="rounded-lg border p-2"
+              >
+                <X size={17} />
+              </button>
+            </div>
+            {selected.isLoading ? (
+              <p className="py-8 text-sm text-slate-500">Loading profile…</p>
+            ) : selected.error ? (
+              <p role="alert" className="py-8 text-sm text-rose-700">
+                {selected.error.message}
+              </p>
+            ) : (
+              selected.data && (
+                <div className="mt-5 space-y-5">
+                  <div className="grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
+                    <p className="text-sm">
+                      Email
+                      <br />
+                      <b>{selected.data.email || "—"}</b>
+                    </p>
+                    <p className="text-sm">
+                      Phone
+                      <br />
+                      <b>{selected.data.phone || "—"}</b>
+                    </p>
+                    <p className="text-sm">
+                      Email status
+                      <br />
+                      <b>
+                        {selected.data.deleted
+                          ? "Removed"
+                          : selected.data.emailVerified
+                            ? "Verified"
+                            : "Unverified"}
+                      </b>
+                    </p>
+                    <p className="text-sm">
+                      Account state
+                      <br />
+                      <b>
+                        {selected.data.deleted
+                          ? "Deleted"
+                          : selected.data.deletionPending
+                            ? "Deletion pending"
+                            : selected.data.disabled
+                              ? "Suspended"
+                              : "Enabled"}
+                      </b>
+                    </p>
+                    <p className="text-sm">
+                      Registered
+                      <br />
+                      <b>
+                        {new Date(selected.data.createdAt).toLocaleString()}
+                      </b>
+                    </p>
+                    <p className="text-sm">
+                      Last sign-in
+                      <br />
+                      <b>
+                        {new Date(selected.data.lastSignedIn).toLocaleString()}
+                      </b>
+                    </p>
+                    <p className="text-sm">
+                      Linked portfolio entries
+                      <br />
+                      <b>{selected.data.linkedEntries}</b>
+                    </p>
+                  </div>
+                  <section>
+                    <h3 className="font-semibold">
+                      Access, roles, and inherited permissions
+                    </h3>
+                    {selected.data.assignments.length ? (
+                      <div className="mt-2 space-y-3">
+                        {selected.data.assignments.map(item => (
+                          <div key={item.id} className="rounded-xl border p-3">
+                            <p className="text-sm font-semibold">
+                              {item.institutionName ??
+                                `Institution ${item.institutionId}`}{" "}
+                              ·{" "}
+                              <span className="capitalize">
+                                {roleLabel(item.role)}
+                              </span>{" "}
+                              · {item.status}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {rolePermissions[item.role] ??
+                                "No permissions description available."}
+                            </p>
+                            {item.role !== "platform_admin" && (
+                              <div className="mt-2 flex flex-wrap items-end gap-2">
+                                <label className="text-xs text-slate-500">
+                                  Change role
+                                  <select
+                                    disabled={pending}
+                                    className="mt-1 block h-10 rounded-lg border bg-white px-3 text-sm capitalize"
+                                    value={
+                                      roleDrafts[item.id] ??
+                                      (item.role as (typeof roles)[number])
+                                    }
+                                    onChange={event =>
+                                      setRoleDrafts(previous => ({
+                                        ...previous,
+                                        [item.id]: event.target
+                                          .value as (typeof roles)[number],
+                                      }))
+                                    }
+                                  >
+                                    {roles.map(option => (
+                                      <option key={option} value={option}>
+                                        {roleLabel(option)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                {(roleDrafts[item.id] ?? item.role) !==
+                                  item.role && (
+                                  <button
+                                    disabled={pending}
+                                    onClick={() =>
+                                      applyRole(item.id, roleDrafts[item.id]!)
+                                    }
+                                    className="h-10 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white"
+                                  >
+                                    Save role
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-500">
+                        No role assignments.
+                      </p>
+                    )}
+                    {!selected.data.assignments.some(
+                      item => item.role === "platform_admin"
+                    ) && (
+                      <form
+                        className="mt-3 rounded-xl border border-dashed p-3"
+                        onSubmit={event => {
+                          event.preventDefault();
+                          if (reason.trim().length < 5) {
+                            setNotice(
+                              "Enter a reason of at least 5 characters before assigning a role."
+                            );
+                            return;
+                          }
+                          if (newInstitutionId)
+                            assignRole.mutate({
+                              userId: selected.data!.id,
+                              institutionId: Number(newInstitutionId),
+                              role: newRole,
+                              reason: reason.trim(),
+                            });
+                        }}
+                      >
+                        <h4 className="text-sm font-semibold">
+                          Assign institution role
+                        </h4>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                          <select
+                            aria-label="Institution"
+                            required
+                            className="h-10 rounded-lg border bg-white px-3 text-sm"
+                            value={newInstitutionId}
+                            onChange={event =>
+                              setNewInstitutionId(event.target.value)
+                            }
+                          >
+                            <option value="">Choose institution</option>
+                            {institutions.data
+                              ?.filter(row => row.active && !row.isDemo)
+                              .map(row => (
+                                <option key={row.id} value={row.id}>
+                                  {row.name}
+                                </option>
+                              ))}
+                          </select>
+                          <select
+                            aria-label="New role"
+                            className="h-10 rounded-lg border bg-white px-3 text-sm capitalize"
+                            value={newRole}
+                            onChange={event =>
+                              setNewRole(
+                                event.target.value as (typeof roles)[number]
+                              )
+                            }
+                          >
+                            {roles.map(option => (
+                              <option key={option} value={option}>
+                                {roleLabel(option)}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            disabled={pending}
+                            className="h-10 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white"
+                          >
+                            Assign role
+                          </button>
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">
+                          Standard roles await institution activation; an
+                          institution administrator role becomes active
+                          immediately. Platform-admin access can only be
+                          provisioned outside this dashboard.
+                        </p>
+                      </form>
+                    )}
+                  </section>
+                  {selected.data.deleted ? (
+                    <p className="rounded-lg bg-slate-100 p-3 text-sm text-slate-700">
+                      Identity-provider account and direct profile fields were
+                      deleted. Linked portfolio and audit records remain
+                      attached to this anonymized record.
+                    </p>
+                  ) : selected.data.assignments.some(
+                    item => item.role === "platform_admin"
+                  ) ? (
+                    <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+                      Platform administrator privileges are provisioned outside
+                      this dashboard and cannot be changed here.
+                    </p>
+                  ) : (
+                    <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                      <h3 className="font-semibold">Account controls</h3>
+                      <label className="block text-xs font-semibold text-slate-600">
+                        Reason for status, role, or deletion action
+                        <textarea
+                          className="mt-1 block min-h-20 w-full rounded-lg border bg-white p-3 text-sm"
+                          value={reason}
+                          onChange={event => setReason(event.target.value)}
+                          minLength={5}
+                          maxLength={500}
+                          required
+                        />
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          disabled={
+                            pending ||
+                            !selected.data.email ||
+                            selected.data.deletionPending
+                          }
+                          onClick={() =>
+                            applyStatus(
+                              selected.data!.id,
+                              selected.data!.disabled ? "active" : "suspended"
+                            )
+                          }
+                          className="rounded-lg border bg-white px-3 py-2 text-sm font-semibold"
+                        >
+                          {selected.data.deletionPending
+                            ? "Deletion pending"
+                            : selected.data.disabled
+                              ? "Reinstate account"
+                              : "Suspend account"}
+                        </button>
+                        <button
+                          disabled={pending || !selected.data.email}
+                          onClick={() =>
+                            recoveryMutation.mutate({
+                              userId: selected.data!.id,
+                              action: "password_reset",
+                            })
+                          }
+                          className="rounded-lg border bg-white px-3 py-2 text-sm font-semibold"
+                        >
+                          Send password reset
+                        </button>
+                        {!selected.data.emailVerified &&
+                          !selected.data.deletionPending && (
+                            <button
+                              disabled={pending || !selected.data.email}
+                              onClick={() =>
+                                recoveryMutation.mutate({
+                                  userId: selected.data!.id,
+                                  action: "email_verification",
+                                })
+                              }
+                              className="rounded-lg border bg-white px-3 py-2 text-sm font-semibold"
+                            >
+                              Resend verification
+                            </button>
+                          )}
+                        <button
+                          disabled={
+                            pending ||
+                            (selected.data.deletionPending === false &&
+                              !selected.data.email)
+                          }
+                          onClick={() => {
+                            const expected =
+                              selected.data!.email ||
+                              `DELETE ${selected.data!.id}`;
+                            const confirmation = window.prompt(
+                              `This permanently deletes the identity-provider account and removes the user's name, email and phone from Teachfolio. Linked portfolio and audit history will be retained. Type exactly: ${expected}`
+                            );
+                            if (confirmation === null) return;
+                            if (reason.trim().length < 5) {
+                              setNotice("Enter a reason before deletion.");
+                              return;
+                            }
+                            deleteAccount.mutate({
+                              userId: selected.data!.id,
+                              confirmation,
+                              reason: reason.trim(),
+                            });
+                          }}
+                          className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700"
+                        >
+                          {selected.data.deletionPending
+                            ? "Retry permanent deletion"
+                            : "Delete account"}
+                        </button>
+                        <span className="inline-flex items-center gap-1 text-xs text-slate-600">
+                          <ShieldCheck size={14} /> Reason and action recorded
+                        </span>
+                      </div>
+                      <p className="text-xs leading-5 text-slate-600">
+                        Suspension disables Teachfolio access. Permanent
+                        deletion removes the identity-provider account and
+                        direct profile data, while preserving linked academic
+                        records and audit history. A server-only Supabase secret
+                        key is required; failed provider deletion leaves a
+                        disabled, anonymized account that can be retried.
+                      </p>
+                    </section>
+                  )}
+                  <section>
+                    <h3 className="font-semibold">Account activity</h3>
+                    <div className="mt-2 divide-y rounded-xl border">
+                      {selected.data.activity.length ? (
+                        selected.data.activity.map(event => (
+                          <article key={event.id} className="p-3">
+                            <p className="text-sm font-semibold capitalize">
+                              {event.action.replaceAll("_", " ")}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {event.detail || event.targetType} ·{" "}
+                              {new Date(event.createdAt).toLocaleString()}
+                            </p>
+                          </article>
+                        ))
+                      ) : (
+                        <p className="p-4 text-sm text-slate-500">
+                          No user-targeted audit events.
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              )
+            )}
+          </section>
+        </div>
+      )}
+    </div>
+  );
 }
