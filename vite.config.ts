@@ -2,6 +2,7 @@ import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 
@@ -10,7 +11,10 @@ import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 // Writes browser logs directly to files, trimmed when exceeding size limit
 // =============================================================================
 
-const PROJECT_ROOT = import.meta.dirname;
+// `import.meta.dirname` changes when the server entry is bundled into dist.
+// Resolve paths from the process working directory so both the source config
+// and bundled server use the project root.
+const PROJECT_ROOT = process.cwd();
 const LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
 const MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024; // 1MB per log file
 const TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6); // Trim to 60% to avoid constant re-trimming
@@ -151,6 +155,8 @@ function vitePluginManusDebugCollector(): Plugin {
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusDebugCollector()];
 
 export default defineConfig({
+  // node_modules may be read-only in containers running as a non-root user.
+  cacheDir: path.join(os.tmpdir(), "teachfolio-vite-cache"),
   plugins,
   resolve: {
     alias: {
