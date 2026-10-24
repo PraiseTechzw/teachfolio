@@ -342,6 +342,7 @@ export default function Workspace({
   });
   const [statusFilter, setStatusFilter] = useState("all");
   const [formError, setFormError] = useState("");
+  const [auditSearch, setAuditSearch] = useState("");
   const utils = trpc.useUtils();
   const markRead = trpc.notifications.markRead.useMutation({
     onSuccess: async () => {
@@ -1034,8 +1035,10 @@ export default function Workspace({
             body="Invitation, activation, account, requirement and review decisions appear here as they occur."
           />
         ) : (
+          <>
+          <label className="mb-3 flex max-w-xl items-center gap-2 rounded-xl border bg-white px-3"><Search size={16}/><input className="h-10 flex-1 bg-transparent text-sm outline-none" placeholder="Filter recent events by action, target, or detail" value={auditSearch} onChange={event => setAuditSearch(event.target.value)}/></label>
           <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white">
-            {auditEvents.data.map(event => (
+            {auditEvents.data.filter(event => `${event.action} ${event.targetType} ${event.targetId} ${event.detail ?? ""}`.toLowerCase().includes(auditSearch.toLowerCase())).map(event => (
               <article
                 key={event.id}
                 className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_190px]"
@@ -1062,6 +1065,7 @@ export default function Workspace({
               </article>
             ))}
           </div>
+          </>
         )}
       </>
     );
