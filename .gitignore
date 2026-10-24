@@ -14,6 +14,9 @@ build/
 .env.test.local
 .env.production.local
 
+# Machine-local credentials and access notes; never commit these.
+docs/development-access.local.md
+
 # IDE and editor files
 .vscode/
 .idea/

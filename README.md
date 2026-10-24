@@ -2,6 +2,15 @@
 
 Teachfolio is a student-teacher teaching-practice portfolio built with React, TypeScript, tRPC, Drizzle and Supabase. Supabase Auth handles accounts, Supabase Postgres stores application records, and a private Supabase Storage bucket holds evidence media.
 
+## Documentation
+
+- [System guide](docs/system-guide.md) — architecture, user flows, settings, security, data and deployment behavior.
+- [Roles and permissions](docs/roles-and-permissions.md) — what each role can do and account-state rules.
+- [ERD](docs/erd.md) — database entities and relationships.
+- [Development accounts](docs/development-accounts.md) — seed commands, official institution list, and local account behavior.
+- [Staging deployment](docs/staging-deployment.md) and [acceptance checklist](docs/staging-acceptance.md).
+- [Requirements audit](docs/requirements-audit.md) — implementation evidence and known gaps.
+
 ## Supabase setup
 
 Create a Supabase project, then copy `.env.example` to `.env` and fill in:
@@ -44,7 +53,7 @@ pnpm provision:platform-admin "$REGISTERED_USER_OPEN_ID" --confirm-trusted-platf
 
 This adds a platform-wide assignment and audit record. Never expose the command through a public endpoint. Platform administrators create institutions and issue invitations. Institution administrators can invite users only to their institution. Invitations are single-use, role- and institution-bound, expire after seven days, and match the exact email. Resend sends an invitation link when configured; if sending cannot be confirmed, the administrator receives a token to share through an approved secure channel.
 
-The provisioner includes all 15 teacher colleges listed by the [Zimbabwe Ministry of Higher and Tertiary Education](https://mhtestd.gov.zw/?p=5772). To add these institutions and create role logins for one selected institution, set `TEACHFOLIO_SEED_INSTITUTION_CODE` and `TEACHFOLIO_SEED_PASSWORD` in the server's private environment, then run `pnpm seed:demo --confirm-provision-accounts`. It creates `student_teacher@teachfolio.com`, `supervisor@teachfolio.com`, `lecturer@teachfolio.com`, `coordinator@teachfolio.com`, and `institution_admin@teachfolio.com`; the configured password is used only for newly created Auth accounts. A shared `password123` is allowed only outside production with `TEACHFOLIO_ALLOW_SHARED_DEMO_PASSWORD=true`; use unique strong passwords for any shared staging environment. Existing Auth passwords are left unchanged. Platform administrator access remains a separate trusted bootstrap step. The seed creates no invented portfolio or placement records.
+The provisioner includes all 15 teacher colleges listed by the [Zimbabwe Ministry of Higher and Tertiary Education](https://mhtestd.gov.zw/?p=5772). To add these institutions and create role logins for one selected institution, set `TEACHFOLIO_SEED_INSTITUTION_CODE` and `TEACHFOLIO_SEED_PASSWORD` in the server's private environment, then run `pnpm seed:demo --confirm-provision-accounts`. It creates `student_teacher@teachfolio.com`, `supervisor@teachfolio.com`, `lecturer@teachfolio.com`, `coordinator@teachfolio.com`, and `institution_admin@teachfolio.com`; the configured password is used only for newly created Auth accounts. Shared seed passwords are allowed only outside production with `TEACHFOLIO_ALLOW_SHARED_DEMO_PASSWORD=true`; use unique strong passwords for any shared staging environment. Existing Auth passwords are left unchanged. Platform administrator access remains a separate trusted bootstrap step. The seed creates no invented portfolio or placement records.
 
 ## Commands and migrations
 
