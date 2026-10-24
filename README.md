@@ -44,7 +44,7 @@ pnpm provision:platform-admin "$REGISTERED_USER_OPEN_ID" --confirm-trusted-platf
 
 This adds a platform-wide assignment and audit record. Never expose the command through a public endpoint. Platform administrators create institutions and issue invitations. Institution administrators can invite users only to their institution. Invitations are single-use, role- and institution-bound, expire after seven days, and match the exact email. Resend sends an invitation link when configured; if sending cannot be confirmed, the administrator receives a token to share through an approved secure channel.
 
-For fictional sample data, run `pnpm seed:demo --confirm-fictional-demo-seed`. This initializes a reserved demo institution and fictional records; it does not create a demo login or upload files.
+To provision real login-capable role accounts and institution records for a controlled staging environment, set `TEACHFOLIO_SEED_INSTITUTIONS` and `TEACHFOLIO_SEED_ACCOUNTS` in the server's private environment, then run `pnpm seed:demo --confirm-provision-accounts`. Use real institution names/codes and accounts you control. Give every account a different email and strong unique password of at least 12 characters; the script never prints passwords. New Auth accounts are confirmed at creation. Existing Auth passwords are left unchanged. The script grants only institution-scoped roles; provision a platform administrator separately with the trusted bootstrap command above. It creates no invented portfolio or placement records.
 
 ## Commands and migrations
 
