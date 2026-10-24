@@ -1951,6 +1951,9 @@ const appRouter = router({
       await database.transaction(async tx => {
         await tx.update(users).set({ disabled: true, deletionPending: true, name: null, email: null, phone: null, emailVerified: false }).where(eq(users.id, input.userId));
         await tx.update(accessAssignments).set({ status: "suspended" }).where(eq(accessAssignments.userId, input.userId));
+        await tx.delete(userPreferences).where(eq(userPreferences.userId, input.userId));
+        await tx.delete(notifications).where(eq(notifications.userId, input.userId));
+        if (target.email) await tx.update(invitations).set({ email: `deleted-${input.userId}@invalid.example`, expiresAt: new Date(0) }).where(eq(invitations.email, target.email.toLowerCase()));
         await tx.insert(auditLogs).values({ institutionId: null, actorUserId: ctx.user.id, action: "platform_user_deletion_started", targetType: "user", targetId: String(input.userId), detail: input.reason });
       });
       try {
