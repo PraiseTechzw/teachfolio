@@ -701,6 +701,7 @@ export function PlatformInstitutionDashboard({
       await utils.admin.institutions.invalidate();
     },
   });
+  const updateInstitution = trpc.admin.updateInstitution.useMutation({ onSuccess: async () => { await utils.admin.institutions.invalidate(); } });
   const rows = institutions.data ?? [];
   const institutionalRows = rows.filter(row => !row.isDemo);
   const filtered = useMemo(
@@ -925,7 +926,7 @@ export function PlatformInstitutionDashboard({
             {filtered.map(row => (
               <article
                 key={row.id}
-                className={`grid gap-3 rounded-xl border p-3 transition-colors sm:grid-cols-[minmax(0,1fr)_100px_130px_180px] sm:items-center ${selectedId === row.id ? "border-indigo-200 bg-indigo-50/40" : "border-slate-200"}`}
+                className={`grid gap-3 rounded-xl border p-3 transition-colors sm:grid-cols-[minmax(0,1fr)_100px_130px_140px_180px] sm:items-center ${selectedId === row.id ? "border-indigo-200 bg-indigo-50/40" : "border-slate-200"}`}
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-indigo-600 ring-1 ring-slate-200">
@@ -946,6 +947,15 @@ export function PlatformInstitutionDashboard({
                   <StateBadge tone={row.active ? "emerald" : "slate"}>
                     {row.active ? "Active" : "Inactive"}
                   </StateBadge>
+                </div>
+                <div className="sm:text-right">
+                  <ActionButton disabled={updateInstitution.isPending || row.isDemo} onClick={() => {
+                    const nextName = window.prompt("Institution name", row.name);
+                    if (nextName === null) return;
+                    const nextCode = window.prompt("Institution code", row.code);
+                    if (nextCode === null) return;
+                    updateInstitution.mutate({ institutionId: row.id, name: nextName.trim(), code: nextCode.trim().toUpperCase() });
+                  }}><Pencil size={14}/> Edit details</ActionButton>
                 </div>
                 <div className="sm:text-right">
                   <ActionButton
@@ -994,6 +1004,7 @@ export function PlatformInstitutionDashboard({
             {setInstitutionStatus.error.message}
           </p>
         )}
+        {updateInstitution.error && <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{updateInstitution.error.message}</p>}
       </section>
       <section className="grid gap-5 xl:grid-cols-2">
         <form
