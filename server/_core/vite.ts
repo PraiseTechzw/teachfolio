@@ -15,6 +15,7 @@ export async function setupVite(app: Express, server: Server) {
 
   const vite = await createViteServer({
     ...viteConfig,
+    root: path.resolve(process.cwd(), "client"),
     configFile: false,
     server: serverOptions,
     appType: "custom",

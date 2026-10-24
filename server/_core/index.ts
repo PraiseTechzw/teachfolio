@@ -110,7 +110,12 @@ async function startServer() {
     })
   );
   // development mode uses Vite, production mode uses static files
-  if (process.env.NODE_ENV === "development") {
+  // Render's runtime mode is controlled by the deployment environment. Treat
+  // hosted instances as production even if a dashboard setting accidentally
+  // leaves NODE_ENV=development; Vite's dev server is for local use only.
+  const isDevelopment =
+    process.env.NODE_ENV === "development" && process.env.RENDER !== "true";
+  if (isDevelopment) {
     await setupVite(app, server);
   } else {
     serveStatic(app);
