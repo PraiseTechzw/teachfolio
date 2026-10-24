@@ -1,5 +1,5 @@
-import { and, eq, inArray } from "drizzle-orm";
-import { accessAssignments, institutions, users } from "../drizzle/schema";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { accessAssignments, institutions, userPreferences, users } from "../drizzle/schema";
 import * as db from "./db";
 
 type EmailContent = {
@@ -192,10 +192,12 @@ export async function emailNotificationRecipients(input: {
       .select({ userId: users.id, email: users.email })
       .from(accessAssignments)
       .innerJoin(users, eq(accessAssignments.userId, users.id))
+      .leftJoin(userPreferences, eq(userPreferences.userId, users.id))
       .where(
         and(
           eq(accessAssignments.institutionId, input.institutionId),
           eq(accessAssignments.status, "active"),
+          or(eq(userPreferences.emailNotifications, true), isNull(userPreferences.emailNotifications)),
           inArray(accessAssignments.userId, userIds)
         )
       );

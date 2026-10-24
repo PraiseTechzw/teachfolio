@@ -73,7 +73,7 @@ export default function InstitutionAdminOverview({
 }) {
   const portfolio = trpc.portfolio.overview.useQuery(undefined, { retry: false });
   const summary = trpc.admin.dashboardSummary.useQuery(undefined, { retry: false });
-  const audit = trpc.admin.audit.useQuery(undefined, { retry: false });
+  const audit = trpc.admin.audit.useQuery({ page: 1, pageSize: 25, search: "" }, { retry: false });
   const entries = portfolio.data?.entries ?? [];
   const firstName = name?.trim().split(/\s+/)[0] || "there";
   const counts = new Map(summary.data?.portfolioStatuses.map(row => [row.status, row.count]) ?? []);
@@ -145,7 +145,7 @@ export default function InstitutionAdminOverview({
 
           <section className="rounded-xl border border-slate-200/90 bg-white shadow-[0_1px_3px_rgba(15,23,42,.035)]">
             <div className="flex items-center justify-between px-5 py-4"><div><h2 className="text-sm font-semibold text-slate-900">Recent admin activity</h2><p className="mt-0.5 text-xs text-slate-500">Institution audit log</p></div><Bell size={16} className="text-slate-400" /></div>
-            {audit.isLoading ? <p role="status" className="px-5 pb-5 text-xs text-slate-500">Loading…</p> : audit.error ? <p className="px-5 pb-5 text-xs text-slate-500">Activity unavailable.</p> : audit.data?.length ? <div className="divide-y divide-slate-100">{audit.data.slice(0, 4).map(event => <div key={event.id} className="flex gap-2.5 px-5 py-3"><span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-500"><ShieldCheck size={12} /></span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold capitalize text-slate-700">{event.action.replaceAll("_", " ")}</p><p className="mt-0.5 truncate text-[11px] text-slate-500">{event.detail || event.targetType}</p></div><time className="shrink-0 text-[10px] text-slate-400">{dateLabel(event.createdAt)}</time></div>)}</div> : <p className="px-5 pb-5 text-xs text-slate-500">No admin activity yet.</p>}
+            {audit.isLoading ? <p role="status" className="px-5 pb-5 text-xs text-slate-500">Loading…</p> : audit.error ? <p className="px-5 pb-5 text-xs text-slate-500">Activity unavailable.</p> : audit.data?.rows.length ? <div className="divide-y divide-slate-100">{audit.data.rows.slice(0, 4).map(event => <div key={event.id} className="flex gap-2.5 px-5 py-3"><span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-500"><ShieldCheck size={12} /></span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold capitalize text-slate-700">{event.action.replaceAll("_", " ")}</p><p className="mt-0.5 truncate text-[11px] text-slate-500">{event.detail || event.targetType}</p></div><time className="shrink-0 text-[10px] text-slate-400">{dateLabel(event.createdAt)}</time></div>)}</div> : <p className="px-5 pb-5 text-xs text-slate-500">No admin activity yet.</p>}
             <button type="button" onClick={() => onNavigate("/admin/audit-logs")} className="flex w-full items-center justify-between border-t border-slate-100 px-5 py-3 text-xs font-semibold text-[#465fff] hover:bg-slate-50">Open audit log <ArrowRight size={13} /></button>
           </section>
 

@@ -119,5 +119,7 @@ export function supabaseIdentity(user: SupabaseUser) {
     openId: user.id,
     name: typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : null,
     email: user.email ?? null,
+    phone: user.phone ?? null,
+    emailVerified: Boolean(user.email_confirmed_at),
   };
 }

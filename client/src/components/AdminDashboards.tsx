@@ -702,6 +702,7 @@ export function PlatformInstitutionDashboard({
     },
   });
   const updateInstitution = trpc.admin.updateInstitution.useMutation({ onSuccess: async () => { await utils.admin.institutions.invalidate(); } });
+  const archiveInstitution = trpc.admin.archiveInstitution.useMutation({ onSuccess: async () => { await utils.admin.institutions.invalidate(); } });
   const rows = institutions.data ?? [];
   const institutionalRows = rows.filter(row => !row.isDemo);
   const filtered = useMemo(
@@ -766,6 +767,7 @@ export function PlatformInstitutionDashboard({
     });
   };
   const toggleInstitution = async (row: NonNullable<typeof selected>) => {
+    if (row.archived) return;
     const nextActive = !row.active;
     const explanation = nextActive
       ? "Restore application access"
@@ -778,6 +780,11 @@ export function PlatformInstitutionDashboard({
     })))
       return;
     setInstitutionStatus.mutate({ institutionId: row.id, active: nextActive });
+  };
+  const toggleArchive = (row: NonNullable<typeof selected>) => {
+    const reason = window.prompt(row.archived ? "Reason for restoring this institution" : "Reason for archiving this institution");
+    if (!reason || reason.trim().length < 5) return;
+    archiveInstitution.mutate({ institutionId: row.id, archived: !row.archived, reason: reason.trim() });
   };
 
   return (
@@ -926,7 +933,7 @@ export function PlatformInstitutionDashboard({
             {filtered.map(row => (
               <article
                 key={row.id}
-                className={`grid gap-3 rounded-xl border p-3 transition-colors sm:grid-cols-[minmax(0,1fr)_100px_130px_140px_180px] sm:items-center ${selectedId === row.id ? "border-indigo-200 bg-indigo-50/40" : "border-slate-200"}`}
+                className={`grid gap-3 rounded-xl border p-3 transition-colors sm:grid-cols-[minmax(0,1fr)_100px_130px_140px_180px_130px] sm:items-center ${selectedId === row.id ? "border-indigo-200 bg-indigo-50/40" : "border-slate-200"}`}
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-indigo-600 ring-1 ring-slate-200">
@@ -945,7 +952,7 @@ export function PlatformInstitutionDashboard({
                 </div>
                 <div>
                   <StateBadge tone={row.active ? "emerald" : "slate"}>
-                    {row.active ? "Active" : "Inactive"}
+                    {row.archived ? "Archived" : row.active ? "Active" : "Inactive"}
                   </StateBadge>
                 </div>
                 <div className="sm:text-right">
@@ -975,7 +982,7 @@ export function PlatformInstitutionDashboard({
                 </div>
                 <div className="sm:text-right">
                   <ActionButton
-                    disabled={setInstitutionStatus.isPending}
+                    disabled={setInstitutionStatus.isPending || row.archived}
                     danger={row.active}
                     onClick={() => toggleInstitution(row)}
                   >
@@ -992,6 +999,7 @@ export function PlatformInstitutionDashboard({
                     )}
                   </ActionButton>
                 </div>
+                <div className="sm:text-right"><ActionButton disabled={archiveInstitution.isPending || row.isDemo || (row.active && !row.archived)} danger={!row.archived} onClick={() => toggleArchive(row)}>{row.archived ? "Restore" : "Archive"}</ActionButton></div>
               </article>
             ))}
           </div>
@@ -1005,6 +1013,7 @@ export function PlatformInstitutionDashboard({
           </p>
         )}
         {updateInstitution.error && <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{updateInstitution.error.message}</p>}
+        {archiveInstitution.error && <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{archiveInstitution.error.message}</p>}
       </section>
       <section className="grid gap-5 xl:grid-cols-2">
         <form

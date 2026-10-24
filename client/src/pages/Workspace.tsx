@@ -70,7 +70,8 @@ function SettingsPage({ user, assignedRoles, institutionId }: { user: Access; as
   const utils = trpc.useUtils();
   const [name, setName] = useState(user.name ?? "");
   const [saved, setSaved] = useState("");
-  const [emailAlerts, setEmailAlerts] = useState(() => localStorage.getItem("teachfolio-email-alerts") !== "false");
+  const preferences = trpc.auth.preferences.useQuery();
+  const savePreferences = trpc.auth.updatePreferences.useMutation({ onSuccess: async () => { await utils.auth.preferences.invalidate(); setSaved("Notification preference saved."); } });
   const update = trpc.auth.updateProfile.useMutation({ onSuccess: async () => { await utils.auth.me.invalidate(); setSaved("Profile updated."); } });
   const reset = trpc.auth.requestPasswordReset.useMutation({ onSuccess: () => setSaved("If password reset is available, instructions have been sent to your email.") });
   return <>
@@ -81,11 +82,15 @@ function SettingsPage({ user, assignedRoles, institutionId }: { user: Access; as
         <p className="mt-3 text-sm text-slate-500">Email: {user.email || "Not available"}</p><p className="mt-1 text-sm text-slate-500">Role: <span className="capitalize">{assignedRoles.map(role => role.replaceAll("_", " ")).join(", ")}</span> · Scope: {institutionId ? user.institutionName || `Institution ${institutionId}` : "Platform administration"}</p>
         <button disabled={update.isPending} className="mt-4 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{update.isPending ? "Saving…" : "Save profile"}</button>{update.error && <p role="alert" className="mt-2 text-sm text-rose-700">{update.error.message}</p>}
       </form>
-      <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Notifications</h2><label className="mt-4 flex items-center gap-3 text-sm"><input type="checkbox" checked={emailAlerts} onChange={event => { setEmailAlerts(event.target.checked); localStorage.setItem("teachfolio-email-alerts", String(event.target.checked)); }} /> Email notification preference on this device</label><p className="mt-2 text-xs text-slate-500">This preference is stored in this browser. It does not change institution workflow notifications.</p></section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Notifications</h2><label className="mt-4 flex items-center gap-3 text-sm"><input type="checkbox" disabled={preferences.isLoading || savePreferences.isPending} checked={preferences.data?.emailNotifications ?? true} onChange={event => savePreferences.mutate({ emailNotifications: event.target.checked })} /> Email workflow notifications</label>{savePreferences.error && <p role="alert" className="mt-2 text-sm text-rose-700">{savePreferences.error.message}</p>}</section>
       <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Password and security</h2><p className="mt-2 text-sm text-slate-500">Request a password reset link for your account.</p><button onClick={() => { setSaved(""); reset.mutate({ email: user.email || "", inviteToken: undefined }); }} disabled={!user.email || reset.isPending} className="mt-4 rounded-lg border px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{reset.isPending ? "Sending…" : "Send password reset link"}</button></section>
       {saved && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{saved}</p>}
     </div>
   </>;
+}
+function AuditExportButton({ search, action, from, to }: { search: string; action: string; from: string; to: string }) {
+  const exportQuery = trpc.admin.auditExport.useQuery({ search, action: action || undefined, from: from || undefined, to: to || undefined }, { enabled: false });
+  return <button onClick={async () => { const result = await exportQuery.refetch(); if (!result.data) return; const url = URL.createObjectURL(new Blob([result.data], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = "platform-audit.csv"; link.click(); URL.revokeObjectURL(url); }} className="h-10 rounded-lg border bg-white px-3 text-sm font-semibold">Export CSV</button>;
 }
 const categoryInfo: Record<
   string,
@@ -343,13 +348,17 @@ export default function Workspace({
   const [statusFilter, setStatusFilter] = useState("all");
   const [formError, setFormError] = useState("");
   const [auditSearch, setAuditSearch] = useState("");
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditFrom, setAuditFrom] = useState("");
+  const [auditTo, setAuditTo] = useState("");
+  const [auditAction, setAuditAction] = useState("");
   const utils = trpc.useUtils();
   const markRead = trpc.notifications.markRead.useMutation({
     onSuccess: async () => {
       await utils.notifications.mine.invalidate();
     },
   });
-  const auditEvents = trpc.admin.audit.useQuery(undefined, {
+  const auditEvents = trpc.admin.audit.useQuery({ page: auditPage, pageSize: 25, search: auditSearch, from: auditFrom || undefined, to: auditTo || undefined, action: auditAction || undefined }, {
     enabled: path === "/admin/audit-logs" && user.activated,
     retry: false,
   });
@@ -1029,16 +1038,16 @@ export default function Workspace({
             title="Audit log unavailable"
             body="The server denied access or could not load audit records."
           />
-        ) : !auditEvents.data?.length ? (
+        ) : !auditEvents.data?.total ? (
           <Empty
             title="No administrative events yet"
             body="Invitation, activation, account, requirement and review decisions appear here as they occur."
           />
         ) : (
           <>
-          <label className="mb-3 flex max-w-xl items-center gap-2 rounded-xl border bg-white px-3"><Search size={16}/><input className="h-10 flex-1 bg-transparent text-sm outline-none" placeholder="Filter recent events by action, target, or detail" value={auditSearch} onChange={event => setAuditSearch(event.target.value)}/></label>
+          <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5"><label className="flex items-center gap-2 rounded-xl border bg-white px-3"><Search size={16}/><input className="h-10 min-w-0 flex-1 text-sm outline-none" placeholder="Search audit events" value={auditSearch} onChange={event => { setAuditSearch(event.target.value); setAuditPage(1); }}/></label><input aria-label="Filter audit from date" className="h-10 rounded-lg border bg-white px-3 text-sm" type="date" value={auditFrom} onChange={event => { setAuditFrom(event.target.value); setAuditPage(1); }}/><input aria-label="Filter audit to date" className="h-10 rounded-lg border bg-white px-3 text-sm" type="date" value={auditTo} onChange={event => { setAuditTo(event.target.value); setAuditPage(1); }}/><input aria-label="Filter audit action" className="h-10 rounded-lg border bg-white px-3 text-sm" placeholder="Exact action (optional)" value={auditAction} onChange={event => { setAuditAction(event.target.value); setAuditPage(1); }}/>{isPlatformAdmin && <AuditExportButton search={auditSearch} from={auditFrom} to={auditTo} action={auditAction}/>}</div>
           <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white">
-            {auditEvents.data.filter(event => `${event.action} ${event.targetType} ${event.targetId} ${event.detail ?? ""}`.toLowerCase().includes(auditSearch.toLowerCase())).map(event => (
+            {auditEvents.data.rows.map(event => (
               <article
                 key={event.id}
                 className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_190px]"
@@ -1065,6 +1074,7 @@ export default function Workspace({
               </article>
             ))}
           </div>
+          <div className="mt-3 flex items-center justify-between text-sm"><span className="text-slate-500">{auditEvents.data.total} events · page {auditEvents.data.page} of {Math.max(1, auditEvents.data.pages)}</span><div className="flex gap-2"><Button disabled={auditPage <= 1} onClick={() => setAuditPage(value => value - 1)}>Previous</Button><Button disabled={auditPage >= auditEvents.data.pages} onClick={() => setAuditPage(value => value + 1)}>Next</Button></div></div>
           </>
         )}
       </>

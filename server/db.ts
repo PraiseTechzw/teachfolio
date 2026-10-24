@@ -23,8 +23,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   if (!db) throw new Error("Database is not available");
   const values: InsertUser = { openId: user.openId };
   const updateSet: Record<string, unknown> = {};
-  for (const field of ["name", "email", "loginMethod"] as const) {
-    if (user[field] !== undefined) { values[field] = user[field] ?? null; updateSet[field] = user[field] ?? null; }
+  for (const field of ["name", "email", "phone", "emailVerified", "loginMethod"] as const) {
+    if (user[field] !== undefined) { Object.assign(values, { [field]: user[field] ?? null }); updateSet[field] = user[field] ?? null; }
   }
   if (user.lastSignedIn !== undefined) { values.lastSignedIn = user.lastSignedIn; updateSet.lastSignedIn = user.lastSignedIn; }
   // Legacy users.role is retained for migration compatibility but NEVER grants application access.
@@ -44,8 +44,8 @@ export async function getUserByOpenId(openId: string) {
 export async function getApplicationAccess(userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const identity = await db.select({ openId: users.openId }).from(users).where(eq(users.id, userId)).limit(1);
-  if (!identity[0] || isReservedDemoIdentity(identity[0].openId)) return null;
+  const identity = await db.select({ openId: users.openId, disabled: users.disabled, emailVerified: users.emailVerified }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!identity[0] || identity[0].disabled || !identity[0].emailVerified || isReservedDemoIdentity(identity[0].openId)) return null;
   const rows = await db.select().from(accessAssignments).where(and(eq(accessAssignments.userId, userId), eq(accessAssignments.status, "active")));
   if (rows.length === 0) return null;
   if (rows.some(row => row.role === "platform_admin" && row.institutionId !== null)) return null;

@@ -23,6 +23,9 @@ export const users = pgTable("users", {
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
+  phone: varchar("phone", { length: 40 }),
+  emailVerified: boolean("emailVerified").default(false).notNull(),
+  disabled: boolean("disabled").default(false).notNull(),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: legacyUserRole("role").default("user").notNull(),
   createdAt: createdAt(),
@@ -36,6 +39,7 @@ export const institutions = pgTable("institutions", {
   code: varchar("code", { length: 40 }).notNull().unique(),
   isDemo: boolean("isDemo").default(false).notNull(),
   active: boolean("active").default(true).notNull(),
+  archived: boolean("archived").default(false).notNull(),
   createdAt: createdAt(),
 }).enableRLS();
 
@@ -164,6 +168,19 @@ export const auditLogs = pgTable("audit_logs", {
   detail: text("detail"),
   createdAt: createdAt(),
 }, table => ({ tenantIdx: index("audit_tenant_idx").on(table.institutionId), actorIdx: index("audit_actor_idx").on(table.actorUserId) })).enableRLS();
+
+export const userPreferences = pgTable("user_preferences", {
+  userId: integer("userId").primaryKey().references(() => users.id),
+  emailNotifications: boolean("emailNotifications").default(true).notNull(),
+  updatedAt: updatedAt(),
+}).enableRLS();
+
+export const platformSettings = pgTable("platform_settings", {
+  key: varchar("key", { length: 80 }).primaryKey(),
+  value: jsonb("value").$type<Record<string, unknown>>().notNull(),
+  updatedBy: integer("updatedBy").references(() => users.id),
+  updatedAt: updatedAt(),
+}).enableRLS();
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;

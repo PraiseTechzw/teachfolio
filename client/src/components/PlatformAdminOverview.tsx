@@ -56,7 +56,7 @@ export default function PlatformAdminOverview({
   const institutions = trpc.admin.institutions.useQuery(undefined, {
     retry: false,
   });
-  const audit = trpc.admin.audit.useQuery(undefined, { retry: false });
+  const audit = trpc.admin.audit.useQuery({ page: 1, pageSize: 25, search: "" }, { retry: false });
   const summary = trpc.admin.platformSummary.useQuery(undefined, { retry: false });
   const allRows = institutions.data ?? [];
   const rows = allRows.filter(row => !row.isDemo);
@@ -64,7 +64,7 @@ export default function PlatformAdminOverview({
   const activeCount = rows.filter(row => row.active).length;
   const pausedCount = rows.length - activeCount;
   const latestInstitutions = rows.slice(0, 5);
-  const latestEvents = audit.data?.slice(0, 5) ?? [];
+  const latestEvents = audit.data?.rows.slice(0, 5) ?? [];
   const firstName = name?.trim().split(/\s+/)[0] || "there";
 
   const metrics = [
@@ -98,8 +98,8 @@ export default function PlatformAdminOverview({
         ? "—"
         : audit.error
           ? "Unavailable"
-        : audit.data?.[0]
-          ? formatDate(audit.data[0].createdAt)
+        : audit.data?.rows[0]
+          ? formatDate(audit.data.rows[0].createdAt)
           : "None yet",
       detail: audit.error ? "Audit feed unavailable" : "Platform-wide record",
       icon: Activity,
