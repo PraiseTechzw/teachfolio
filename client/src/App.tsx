@@ -187,6 +187,12 @@ const navBase = [
     roles: ["platform_admin"],
   },
   {
+    label: "Platform users",
+    path: "/admin/platform-users",
+    icon: Users,
+    roles: ["platform_admin"],
+  },
+  {
     label: "Settings",
     path: "/settings",
     icon: Settings,

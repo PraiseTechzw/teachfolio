@@ -57,6 +57,7 @@ export default function PlatformAdminOverview({
     retry: false,
   });
   const audit = trpc.admin.audit.useQuery(undefined, { retry: false });
+  const summary = trpc.admin.platformSummary.useQuery(undefined, { retry: false });
   const allRows = institutions.data ?? [];
   const rows = allRows.filter(row => !row.isDemo);
   const hasPracticeWorkspaces = allRows.some(row => row.isDemo);
@@ -165,6 +166,15 @@ export default function PlatformAdminOverview({
             </article>
           );
         })}
+      </section>
+
+      <section aria-label="Platform usage" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ["User accounts", summary.data?.users],
+          ["Pending invitations", summary.data?.pendingInvitations],
+          ["Submissions awaiting review", summary.data?.pendingSubmissions],
+          ["Evidence storage", summary.data ? `${summary.data.evidenceFiles} files · ${(summary.data.evidenceBytes / 1024 / 1024).toFixed(1)} MB` : undefined],
+        ].map(([label, value]) => <article key={String(label)} className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-2 text-xl font-semibold">{summary.isLoading || summary.error ? "—" : value}</p></article>)}
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,.8fr)]">

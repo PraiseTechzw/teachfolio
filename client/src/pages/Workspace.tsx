@@ -26,6 +26,7 @@ import {
 import InstitutionAdminOverview from "@/components/InstitutionAdminOverview";
 import StudentPortfolioModule from "@/components/StudentPortfolioModule";
 import ReviewQueueDashboard from "@/components/ReviewQueueDashboard";
+import PlatformUserManagement from "@/components/PlatformUserManagement";
 import ReviewHistoryTimeline from "@/components/ReviewHistoryTimeline";
 import {
   PortfolioStructuredDetails,
@@ -63,7 +64,29 @@ type Access = {
   activated: boolean;
   institutionId: number | null;
   roles: string[];
+  institutionName?: string | null;
 };
+function SettingsPage({ user, assignedRoles, institutionId }: { user: Access; assignedRoles: string[]; institutionId: number | null }) {
+  const utils = trpc.useUtils();
+  const [name, setName] = useState(user.name ?? "");
+  const [saved, setSaved] = useState("");
+  const [emailAlerts, setEmailAlerts] = useState(() => localStorage.getItem("teachfolio-email-alerts") !== "false");
+  const update = trpc.auth.updateProfile.useMutation({ onSuccess: async () => { await utils.auth.me.invalidate(); setSaved("Profile updated."); } });
+  const reset = trpc.auth.requestPasswordReset.useMutation({ onSuccess: () => setSaved("If password reset is available, instructions have been sent to your email.") });
+  return <>
+    <PageTitle title="Settings" description="Manage your profile and personal preferences." />
+    <div className="grid max-w-3xl gap-4">
+      <form className="rounded-2xl border border-slate-200 bg-white p-5" onSubmit={event => { event.preventDefault(); setSaved(""); update.mutate({ name: name.trim() }); }}>
+        <h2 className="font-semibold">Profile</h2><label className="mt-4 block text-xs font-semibold text-slate-600">Display name<input className="mt-1.5 h-11 w-full rounded-xl border px-3 text-sm" value={name} onChange={event => setName(event.target.value)} maxLength={120} required /></label>
+        <p className="mt-3 text-sm text-slate-500">Email: {user.email || "Not available"}</p><p className="mt-1 text-sm text-slate-500">Role: <span className="capitalize">{assignedRoles.map(role => role.replaceAll("_", " ")).join(", ")}</span> · Scope: {institutionId ? user.institutionName || `Institution ${institutionId}` : "Platform administration"}</p>
+        <button disabled={update.isPending} className="mt-4 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{update.isPending ? "Saving…" : "Save profile"}</button>{update.error && <p role="alert" className="mt-2 text-sm text-rose-700">{update.error.message}</p>}
+      </form>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Notifications</h2><label className="mt-4 flex items-center gap-3 text-sm"><input type="checkbox" checked={emailAlerts} onChange={event => { setEmailAlerts(event.target.checked); localStorage.setItem("teachfolio-email-alerts", String(event.target.checked)); }} /> Email notification preference on this device</label><p className="mt-2 text-xs text-slate-500">This preference is stored in this browser. It does not change institution workflow notifications.</p></section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Password and security</h2><p className="mt-2 text-sm text-slate-500">Request a password reset link for your account.</p><button onClick={() => { setSaved(""); reset.mutate({ email: user.email || "", inviteToken: undefined }); }} disabled={!user.email || reset.isPending} className="mt-4 rounded-lg border px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{reset.isPending ? "Sending…" : "Send password reset link"}</button></section>
+      {saved && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{saved}</p>}
+    </div>
+  </>;
+}
 const categoryInfo: Record<
   string,
   { label: string; icon: typeof BookOpen; description: string }
@@ -147,6 +170,7 @@ const titleFor = (path: string) =>
       "/admin/requirements": "Portfolio requirements",
       "/admin/audit-logs": "Audit log",
       "/admin/institutions": "Institution onboarding",
+      "/admin/platform-users": "Platform user management",
       "/access-denied": "Access denied",
     }) as Record<string, string>
   )[path] ?? "Portfolio record";
@@ -1085,6 +1109,9 @@ export default function Workspace({
   if (path === "/admin/institutions")
     return <PlatformInstitutionDashboard allowed={isPlatformAdmin} />;
 
+  if (path === "/admin/platform-users")
+    return isPlatformAdmin ? <PlatformUserManagement /> : <Empty title="Platform administrator access required" body="User directory access is restricted to platform administrators." />;
+
   if (path === "/admin/users")
     return (
       <UserActivationDashboard
@@ -1101,6 +1128,11 @@ export default function Workspace({
     );
 
   if (path === "/settings")
+    return (
+      <SettingsPage user={user} assignedRoles={assignedRoles} institutionId={institutionIdSafe} />
+    );
+
+  if (path === "/settings-old")
     return (
       <>
         <PageTitle
@@ -1130,7 +1162,7 @@ export default function Workspace({
               <p className="text-xs text-slate-500">Institution scope</p>
               <p className="mt-1 text-sm font-semibold">
                 {institutionIdSafe
-                  ? `Institution ${institutionIdSafe}`
+                  ? `Institution ${user.institutionName || institutionIdSafe}`
                   : "Platform scope"}
               </p>
             </div>

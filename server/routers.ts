@@ -438,7 +438,14 @@ const appRouter = router({
         activated: Boolean(access),
         institutionId: access?.institutionId ?? null,
         roles: access?.roles ?? [],
+        institutionName: access?.institutionId ? (await (await db.getDb())?.select({ name: institutions.name }).from(institutions).where(eq(institutions.id, access.institutionId)).limit(1))?.[0]?.name ?? null : null,
       };
+    }),
+    updateProfile: applicationProcedure.input(z.object({ name: z.string().trim().min(1).max(120) })).mutation(async ({ ctx, input }) => {
+      const database = await db.getDb();
+      if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+      await database.update(users).set({ name: input.name }).where(eq(users.id, ctx.user.id));
+      return { success: true };
     }),
     claimInvitation: protectedProcedure
       .input(z.object({ token: z.string().min(20).max(256) }))
@@ -1797,6 +1804,42 @@ const appRouter = router({
         .from(institutions)
         .orderBy(desc(institutions.createdAt))
         .limit(500);
+    }),
+    platformSummary: requireRoles("platform_admin").query(async () => {
+      const database = await db.getDb();
+      if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+      const [userRows, assignmentRows, invitationRows, entryRows, reviewRows, fileRows] = await Promise.all([
+        database.select({ total: count() }).from(users),
+        database.select({ total: count() }).from(accessAssignments).where(eq(accessAssignments.status, "active")),
+        database.select({ total: count() }).from(invitations).where(and(isNull(invitations.acceptedAt), gt(invitations.expiresAt, new Date()))),
+        database.select({ total: count() }).from(portfolioEntries).where(inArray(portfolioEntries.status, ["submitted", "under_review", "resubmitted"])),
+        database.select({ total: count() }).from(reviews),
+        database.select({ total: count(), bytes: sql<number>`coalesce(sum(${evidenceFiles.byteSize}), 0)` }).from(evidenceFiles),
+      ]);
+      return { users: Number(userRows[0]?.total ?? 0), activeAssignments: Number(assignmentRows[0]?.total ?? 0), pendingInvitations: Number(invitationRows[0]?.total ?? 0), pendingSubmissions: Number(entryRows[0]?.total ?? 0), reviews: Number(reviewRows[0]?.total ?? 0), evidenceFiles: Number(fileRows[0]?.total ?? 0), evidenceBytes: Number(fileRows[0]?.bytes ?? 0) };
+    }),
+    platformUsers: requireRoles("platform_admin").query(async () => {
+      const database = await db.getDb();
+      if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+      return database.select({ userId: users.id, name: users.name, email: users.email, lastSignedIn: users.lastSignedIn, assignmentId: accessAssignments.id, institutionId: accessAssignments.institutionId, institutionName: institutions.name, role: accessAssignments.role, status: accessAssignments.status }).from(users).leftJoin(accessAssignments, eq(accessAssignments.userId, users.id)).leftJoin(institutions, eq(accessAssignments.institutionId, institutions.id)).orderBy(desc(users.createdAt)).limit(1000);
+    }),
+    setPlatformAssignmentStatus: requireRoles("platform_admin").input(z.object({ assignmentId: z.number().int().positive(), status: z.enum(["active", "suspended"]) })).mutation(async ({ ctx, input }) => {
+      const database = await db.getDb();
+      if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+      const rows = await database.select().from(accessAssignments).where(eq(accessAssignments.id, input.assignmentId)).limit(1);
+      const assignment = rows[0];
+      if (!assignment || assignment.role === "platform_admin") throw new TRPCError({ code: "NOT_FOUND" });
+      await database.update(accessAssignments).set({ status: input.status }).where(eq(accessAssignments.id, input.assignmentId));
+      await db.writeAudit({ institutionId: null, actorUserId: ctx.user.id, action: input.status === "suspended" ? "platform_assignment_suspended" : "platform_assignment_reactivated", targetType: "access_assignment", targetId: String(input.assignmentId), detail: `User ${assignment.userId}; institution ${assignment.institutionId}; role ${assignment.role}` });
+      return { success: true };
+    }),
+    updateInstitution: requireRoles("platform_admin").input(z.object({ institutionId: z.number().int().positive(), name: z.string().trim().min(3).max(220), code: z.string().trim().regex(/^[A-Z0-9-]{2,40}$/) })).mutation(async ({ ctx, input }) => {
+      const database = await db.getDb();
+      if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+      const changed = await database.update(institutions).set({ name: input.name, code: input.code }).where(eq(institutions.id, input.institutionId)).returning({ id: institutions.id });
+      if (!changed.length) throw new TRPCError({ code: "NOT_FOUND" });
+      await db.writeAudit({ institutionId: null, actorUserId: ctx.user.id, action: "institution_updated", targetType: "institution", targetId: String(input.institutionId), detail: `${input.name} (${input.code})` });
+      return { success: true };
     }),
     setInstitutionStatus: requireRoles("platform_admin")
       .input(
