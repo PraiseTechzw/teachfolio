@@ -176,12 +176,13 @@ export default function PlatformAdminOverview({
         })}
       </section>
 
-      <section aria-label="Platform users" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label="Platform users" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {[
           ["All accounts", summary.data?.users],
           ["Active users", summary.data?.activeUsers],
           ["Pending users", summary.data?.pendingUsers],
           ["Suspended users", summary.data?.suspendedUsers],
+          ["Deleted accounts", summary.data?.deletedUsers],
         ].map(([label, value]) => <article key={String(label)} className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-2 text-xl font-semibold">{summary.isLoading || summary.error ? "—" : value}</p></article>)}
       </section>
 
