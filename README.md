@@ -164,6 +164,7 @@ Without a payment method, Render says it suspends services or disables new build
 
 ## Documentation
 
+- [User manual](docs/user-manual.md) — step-by-step instructions for student teachers, reviewers, coordinators, and administrators.
 - [System guide](docs/system-guide.md) — architecture, user journeys, settings, security, and known boundaries.
 - [Roles and permissions](docs/roles-and-permissions.md) — role capabilities and account-state rules.
 - [Database ERD](docs/erd.md) — database entities and relationships.
