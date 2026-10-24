@@ -34,3 +34,6 @@ ALTER TABLE public.platform_settings ENABLE ROW LEVEL SECURITY;
 INSERT INTO public.platform_settings (key, value)
 VALUES ('invitation_expiry_days', '{"days":7}'::jsonb)
 ON CONFLICT (key) DO NOTHING;
+INSERT INTO public.platform_settings (key, value)
+VALUES ('max_evidence_mib', '{"mib":25}'::jsonb)
+ON CONFLICT (key) DO NOTHING;

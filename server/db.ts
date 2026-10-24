@@ -139,7 +139,7 @@ export async function getVisibleUsers(institutionId: number) {
   if (!db) throw new Error("Database is not available");
   return db.select({
     assignment: { id: accessAssignments.id, userId: accessAssignments.userId, institutionId: accessAssignments.institutionId, role: accessAssignments.role, status: accessAssignments.status, assignedBy: accessAssignments.assignedBy, createdAt: accessAssignments.createdAt, updatedAt: accessAssignments.updatedAt },
-    user: { id: users.id, name: users.name, email: users.email, lastSignedIn: users.lastSignedIn },
+    user: { id: users.id, name: users.name, email: users.email, phone: users.phone, emailVerified: users.emailVerified, disabled: users.disabled, lastSignedIn: users.lastSignedIn },
   }).from(accessAssignments).innerJoin(users, eq(accessAssignments.userId, users.id)).where(eq(accessAssignments.institutionId, institutionId)).orderBy(desc(accessAssignments.createdAt)).limit(250);
 }
 

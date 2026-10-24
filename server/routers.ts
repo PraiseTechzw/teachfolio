@@ -527,6 +527,14 @@ const appRouter = router({
     }),
   }),
   portfolio: router({
+    uploadLimit: applicationProcedure.query(async () => {
+      const database = await db.getDb();
+      if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+      const rows = await database.select().from(platformSettings).where(eq(platformSettings.key, "max_evidence_mib")).limit(1);
+      const value = rows[0]?.value?.mib;
+      const maxEvidenceMiB = typeof value === "number" && value >= 1 && value <= 25 ? value : 25;
+      return { maxEvidenceMiB, maxEvidenceBytes: maxEvidenceMiB * 1024 * 1024 };
+    }),
     overview: applicationProcedure.query(async ({ ctx }) => {
       if (ctx.appAccess.institutionId === null)
         return {
@@ -1846,15 +1854,17 @@ const appRouter = router({
     platformConfiguration: requireRoles("platform_admin").query(async () => {
       const database = await db.getDb();
       if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
-      const rows = await database.select().from(platformSettings).where(eq(platformSettings.key, "invitation_expiry_days")).limit(1);
-      const value = rows[0]?.value;
-      return { invitationExpiryDays: typeof value?.days === "number" ? value.days : 7 };
+      const rows = await database.select().from(platformSettings).where(inArray(platformSettings.key, ["invitation_expiry_days", "max_evidence_mib"]));
+      const expiry = rows.find(row => row.key === "invitation_expiry_days")?.value;
+      const maxEvidence = rows.find(row => row.key === "max_evidence_mib")?.value;
+      return { invitationExpiryDays: typeof expiry?.days === "number" ? expiry.days : 7, maxEvidenceMiB: typeof maxEvidence?.mib === "number" ? maxEvidence.mib : 25 };
     }),
-    updatePlatformConfiguration: requireRoles("platform_admin").input(z.object({ invitationExpiryDays: z.number().int().min(1).max(30) })).mutation(async ({ ctx, input }) => {
+    updatePlatformConfiguration: requireRoles("platform_admin").input(z.object({ invitationExpiryDays: z.number().int().min(1).max(30), maxEvidenceMiB: z.number().int().min(1).max(25) })).mutation(async ({ ctx, input }) => {
       const database = await db.getDb();
       if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       await database.insert(platformSettings).values({ key: "invitation_expiry_days", value: { days: input.invitationExpiryDays }, updatedBy: ctx.user.id }).onConflictDoUpdate({ target: platformSettings.key, set: { value: { days: input.invitationExpiryDays }, updatedBy: ctx.user.id, updatedAt: new Date() } });
-      await db.writeAudit({ institutionId: null, actorUserId: ctx.user.id, action: "platform_configuration_updated", targetType: "platform_setting", targetId: "invitation_expiry_days", detail: `${input.invitationExpiryDays} days` });
+      await database.insert(platformSettings).values({ key: "max_evidence_mib", value: { mib: input.maxEvidenceMiB }, updatedBy: ctx.user.id }).onConflictDoUpdate({ target: platformSettings.key, set: { value: { mib: input.maxEvidenceMiB }, updatedBy: ctx.user.id, updatedAt: new Date() } });
+      await db.writeAudit({ institutionId: null, actorUserId: ctx.user.id, action: "platform_configuration_updated", targetType: "platform_setting", targetId: "platform_defaults", detail: `Invitation expiry ${input.invitationExpiryDays} days; evidence upload cap ${input.maxEvidenceMiB} MiB.` });
       return { success: true };
     }),
     platformUsers: requireRoles("platform_admin").input(z.object({ page: z.number().int().min(1).default(1), pageSize: z.number().int().min(10).max(100).default(25), search: z.string().trim().max(120).default(""), role: z.enum(["student_teacher", "supervisor", "lecturer", "coordinator", "institution_admin", "platform_admin"]).optional(), status: z.enum(["active", "pending", "suspended"]).optional(), verified: z.enum(["all", "verified", "unverified"]).default("all"), registeredFrom: z.string().date().optional(), registeredTo: z.string().date().optional(), sort: z.enum(["newest", "oldest", "last_sign_in"]).default("newest") }).default({ page: 1, pageSize: 25, search: "", verified: "all", sort: "newest" })).query(async ({ input }) => {
@@ -1892,18 +1902,20 @@ const appRouter = router({
       const accountRows = await database.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, emailVerified: users.emailVerified, disabled: users.disabled, deletionPending: users.deletionPending, createdAt: users.createdAt, lastSignedIn: users.lastSignedIn }).from(users).where(eq(users.id, input.userId)).limit(1);
       const account = accountRows[0];
       if (!account) throw new TRPCError({ code: "NOT_FOUND" });
-      const [assignments, activity, linked] = await Promise.all([
+      const [assignments, linked] = await Promise.all([
         database.select({ id: accessAssignments.id, institutionId: accessAssignments.institutionId, institutionName: institutions.name, role: accessAssignments.role, status: accessAssignments.status, createdAt: accessAssignments.createdAt }).from(accessAssignments).leftJoin(institutions, eq(accessAssignments.institutionId, institutions.id)).where(eq(accessAssignments.userId, input.userId)),
-        database.select().from(auditLogs).where(and(eq(auditLogs.targetType, "user"), eq(auditLogs.targetId, String(input.userId)))).orderBy(desc(auditLogs.createdAt)).limit(100),
         database.select({ entries: count() }).from(portfolioEntries).where(eq(portfolioEntries.userId, input.userId)),
       ]);
+      const assignmentIds = assignments.map(row => String(row.id));
+      const activity = await database.select().from(auditLogs).where(or(and(eq(auditLogs.targetType, "user"), eq(auditLogs.targetId, String(input.userId))), ...(assignmentIds.length ? [and(eq(auditLogs.targetType, "access_assignment"), inArray(auditLogs.targetId, assignmentIds))] : []))).orderBy(desc(auditLogs.createdAt)).limit(100);
       return { ...account, assignments, activity, linkedEntries: Number(linked[0]?.entries ?? 0) };
     }),
     setPlatformUserStatus: requireRoles("platform_admin").input(z.object({ userId: z.number().int().positive(), status: z.enum(["active", "suspended"]), reason: z.string().trim().min(5).max(500) })).mutation(async ({ ctx, input }) => {
       const database = await db.getDb();
       if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
-      const target = await database.select({ id: users.id, disabled: users.disabled }).from(users).where(eq(users.id, input.userId)).limit(1);
+      const target = await database.select({ id: users.id, disabled: users.disabled, email: users.email, deletionPending: users.deletionPending }).from(users).where(eq(users.id, input.userId)).limit(1);
       if (!target[0]) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!target[0].email || target[0].deletionPending) throw new TRPCError({ code: "CONFLICT", message: "A deleted or deletion-pending identity cannot be reactivated." });
       const isPlatformAdmin = await database.select({ id: accessAssignments.id }).from(accessAssignments).where(and(eq(accessAssignments.userId, input.userId), eq(accessAssignments.role, "platform_admin"))).limit(1);
       if (isPlatformAdmin.length) throw new TRPCError({ code: "FORBIDDEN", message: "Platform administrator accounts can only be managed through the secured provisioning process." });
       if (input.status === "suspended") {
@@ -1956,6 +1968,8 @@ const appRouter = router({
       const rows = await database.select().from(accessAssignments).where(eq(accessAssignments.id, input.assignmentId)).limit(1);
       const assignment = rows[0];
       if (!assignment || !assignment.institutionId || assignment.role === "platform_admin") throw new TRPCError({ code: "NOT_FOUND" });
+      const account = await database.select({ disabled: users.disabled, deletionPending: users.deletionPending }).from(users).where(eq(users.id, assignment.userId)).limit(1);
+      if (account[0]?.disabled || account[0]?.deletionPending) throw new TRPCError({ code: "CONFLICT", message: "Roles cannot be changed while an account is suspended or being deleted." });
       if (assignment.role === "institution_admin" && input.role !== "institution_admin" && assignment.status === "active") {
         const admins = await database.select({ total: count() }).from(accessAssignments).where(and(eq(accessAssignments.institutionId, assignment.institutionId), eq(accessAssignments.role, "institution_admin"), eq(accessAssignments.status, "active")));
         if (Number(admins[0]?.total ?? 0) <= 1) throw new TRPCError({ code: "CONFLICT", message: "Assign another active institution administrator before changing this role." });
@@ -1976,11 +1990,14 @@ const appRouter = router({
       if (!target[0] || !institution[0]) throw new TRPCError({ code: "NOT_FOUND" });
       if (target[0].disabled || !target[0].emailVerified) throw new TRPCError({ code: "CONFLICT", message: "Verify and enable this account before assigning a role." });
       if (!institution[0].active || institution[0].isDemo) throw new TRPCError({ code: "FORBIDDEN", message: "Roles can only be assigned in active institution workspaces." });
+      const otherScope = await database.select({ institutionId: accessAssignments.institutionId }).from(accessAssignments).where(and(eq(accessAssignments.userId, input.userId), eq(accessAssignments.status, "active")));
+      if (otherScope.some(row => row.institutionId !== input.institutionId)) throw new TRPCError({ code: "CONFLICT", message: "This account already has active access in another institution. Resolve the existing assignment first." });
       const existing = await database.select({ id: accessAssignments.id }).from(accessAssignments).where(and(eq(accessAssignments.userId, input.userId), eq(accessAssignments.institutionId, input.institutionId), eq(accessAssignments.role, input.role))).limit(1);
       if (existing.length) throw new TRPCError({ code: "CONFLICT", message: "This user already has that institution role." });
-      const inserted = await database.insert(accessAssignments).values({ userId: input.userId, institutionId: input.institutionId, role: input.role, status: "pending", assignedBy: ctx.user.id }).returning({ id: accessAssignments.id });
-      await db.writeAudit({ institutionId: null, actorUserId: ctx.user.id, action: "platform_user_role_assigned", targetType: "user", targetId: String(input.userId), detail: `${input.role} assigned for institution ${input.institutionId} as pending; ${input.reason}` });
-      return { assignmentId: inserted[0]!.id };
+      const assignmentStatus = input.role === "institution_admin" ? "active" : "pending";
+      const inserted = await database.insert(accessAssignments).values({ userId: input.userId, institutionId: input.institutionId, role: input.role, status: assignmentStatus, assignedBy: ctx.user.id }).returning({ id: accessAssignments.id });
+      await db.writeAudit({ institutionId: null, actorUserId: ctx.user.id, action: "platform_user_role_assigned", targetType: "user", targetId: String(input.userId), detail: `${input.role} assigned for institution ${input.institutionId} as ${assignmentStatus}; ${input.reason}` });
+      return { assignmentId: inserted[0]!.id, status: assignmentStatus };
     }),
     platformUserRecovery: requireRoles("platform_admin").input(z.object({ userId: z.number().int().positive(), action: z.enum(["password_reset", "email_verification"]) })).mutation(async ({ ctx, input }) => {
       const database = await db.getDb();
@@ -2005,16 +2022,6 @@ const appRouter = router({
       const rows = ids.length ? await database.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, emailVerified: users.emailVerified, disabled: users.disabled, createdAt: users.createdAt, lastSignedIn: users.lastSignedIn }).from(users).where(inArray(users.id, ids)).orderBy(desc(users.createdAt)) : [];
       const assignments = ids.length ? await database.select({ userId: accessAssignments.userId, role: accessAssignments.role, status: accessAssignments.status, institutionName: institutions.name }).from(accessAssignments).leftJoin(institutions, eq(accessAssignments.institutionId, institutions.id)).where(inArray(accessAssignments.userId, ids)) : [];
       return ["user_id,name,email,phone,email_verified,disabled,created_at,last_sign_in,roles_and_institutions", ...rows.map(row => [row.id, row.name, row.email, row.phone, row.emailVerified, row.disabled, row.createdAt.toISOString(), row.lastSignedIn.toISOString(), assignments.filter(item => item.userId === row.id).map(item => `${item.institutionName ?? "Platform"}: ${item.role} (${item.status})`).join("; ")].map(value => csvCell(value)).join(","))].join("\n");
-    }),
-    setPlatformAssignmentStatus: requireRoles("platform_admin").input(z.object({ assignmentId: z.number().int().positive(), status: z.enum(["active", "suspended"]) })).mutation(async ({ ctx, input }) => {
-      const database = await db.getDb();
-      if (!database) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
-      const rows = await database.select().from(accessAssignments).where(eq(accessAssignments.id, input.assignmentId)).limit(1);
-      const assignment = rows[0];
-      if (!assignment || assignment.role === "platform_admin") throw new TRPCError({ code: "NOT_FOUND" });
-      await database.update(accessAssignments).set({ status: input.status }).where(eq(accessAssignments.id, input.assignmentId));
-      await db.writeAudit({ institutionId: null, actorUserId: ctx.user.id, action: input.status === "suspended" ? "platform_assignment_suspended" : "platform_assignment_reactivated", targetType: "access_assignment", targetId: String(input.assignmentId), detail: `User ${assignment.userId}; institution ${assignment.institutionId}; role ${assignment.role}` });
-      return { success: true };
     }),
     updateInstitution: requireRoles("platform_admin").input(z.object({ institutionId: z.number().int().positive(), name: z.string().trim().min(3).max(220), code: z.string().trim().regex(/^[A-Z0-9-]{2,40}$/) })).mutation(async ({ ctx, input }) => {
       const database = await db.getDb();
@@ -2323,6 +2330,9 @@ const appRouter = router({
           .limit(1);
         if (!assignment[0] || assignment[0].role === "platform_admin")
           throw new TRPCError({ code: "NOT_FOUND" });
+        const accountState = await database.select({ disabled: users.disabled, emailVerified: users.emailVerified }).from(users).where(eq(users.id, assignment[0].userId)).limit(1);
+        if (input.status === "active" && (accountState[0]?.disabled || !accountState[0]?.emailVerified))
+          throw new TRPCError({ code: "FORBIDDEN", message: "A platform-suspended or unverified account cannot be activated by an institution administrator." });
         let activeInstitutionAdminCount = 0;
         if (
           assignment[0].role === "institution_admin" &&

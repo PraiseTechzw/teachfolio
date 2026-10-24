@@ -41,7 +41,7 @@ export function validateEvidenceMetadata(input: {
   fileName: string;
   mimeType: string;
   byteSize: number;
-}): string | null {
+}, maxBytes = MAX_EVIDENCE_BYTES): string | null {
   const fileName = input.fileName.trim();
   const mime = input.mimeType.toLowerCase();
   const extension = fileName.slice(fileName.lastIndexOf(".")).toLowerCase();
@@ -49,8 +49,8 @@ export function validateEvidenceMetadata(input: {
     return "Allowed types are PDF, DOCX, XLSX, PPTX, JPG, PNG, and MP4.";
   if (!Number.isSafeInteger(input.byteSize) || input.byteSize <= 0)
     return "Choose a non-empty file.";
-  if (input.byteSize > MAX_EVIDENCE_BYTES)
-    return "Files are limited to 25 MiB.";
+  if (input.byteSize > maxBytes)
+    return `Files are limited to ${Math.floor(maxBytes / (1024 * 1024))} MiB.`;
   return null;
 }
 

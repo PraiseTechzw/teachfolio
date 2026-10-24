@@ -61,8 +61,9 @@ export default function PlatformAdminOverview({
   const allRows = institutions.data ?? [];
   const rows = allRows.filter(row => !row.isDemo);
   const hasPracticeWorkspaces = allRows.some(row => row.isDemo);
-  const activeCount = rows.filter(row => row.active).length;
-  const pausedCount = rows.length - activeCount;
+  const activeCount = rows.filter(row => row.active && !row.archived).length;
+  const pausedCount = rows.filter(row => !row.active && !row.archived).length;
+  const archivedCount = rows.filter(row => row.archived).length;
   const latestInstitutions = rows.slice(0, 5);
   const latestEvents = audit.data?.rows.slice(0, 5) ?? [];
   const firstName = name?.trim().split(/\s+/)[0] || "there";
@@ -89,6 +90,13 @@ export default function PlatformAdminOverview({
       value:
         institutions.isLoading || institutions.error ? "—" : pausedCount,
       detail: "Access currently suspended",
+      icon: CirclePause,
+      tone: "amber",
+    },
+    {
+      label: "Archived workspaces",
+      value: institutions.isLoading || institutions.error ? "—" : archivedCount,
+      detail: "Retained for historical reference",
       icon: CirclePause,
       tone: "amber",
     },
@@ -140,7 +148,7 @@ export default function PlatformAdminOverview({
 
       <section
         aria-label="Institution workspace summary"
-        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"
       >
         {metrics.map(metric => {
           const Icon = metric.icon;
@@ -168,9 +176,17 @@ export default function PlatformAdminOverview({
         })}
       </section>
 
-      <section aria-label="Platform usage" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label="Platform users" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          ["User accounts", summary.data?.users],
+          ["All accounts", summary.data?.users],
+          ["Active users", summary.data?.activeUsers],
+          ["Pending users", summary.data?.pendingUsers],
+          ["Suspended users", summary.data?.suspendedUsers],
+        ].map(([label, value]) => <article key={String(label)} className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-2 text-xl font-semibold">{summary.isLoading || summary.error ? "—" : value}</p></article>)}
+      </section>
+
+      <section aria-label="Platform usage" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {[
           ["Pending invitations", summary.data?.pendingInvitations],
           ["Submissions awaiting review", summary.data?.pendingSubmissions],
           ["Evidence storage", summary.data ? `${summary.data.evidenceFiles} files · ${(summary.data.evidenceBytes / 1024 / 1024).toFixed(1)} MB` : undefined],
@@ -254,9 +270,9 @@ export default function PlatformAdminOverview({
                   </div>
                   <div className="flex items-center gap-2 pl-[52px] sm:pl-0">
                     <span
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${institution.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${institution.active && !institution.archived ? "bg-emerald-50 text-emerald-700" : institution.archived ? "bg-violet-50 text-violet-700" : "bg-slate-100 text-slate-600"}`}
                     >
-                      {institution.active ? "Active" : "Paused"}
+                      {institution.archived ? "Archived" : institution.active ? "Active" : "Paused"}
                     </span>
                   </div>
                 </li>

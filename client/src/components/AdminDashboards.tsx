@@ -461,20 +461,19 @@ export function UserActivationDashboard({
                   </div>
                   <div>
                     <StateBadge
-                      tone={
-                        active
+                      tone={row.user.disabled ? "rose" : !row.user.emailVerified ? "amber" : active
                           ? "emerald"
                           : row.assignment.status === "suspended"
                             ? "rose"
                             : "amber"
                       }
                     >
-                      {row.assignment.status}
+                      {row.user.disabled ? "platform suspended" : !row.user.emailVerified ? "email unverified" : row.assignment.status}
                     </StateBadge>
                   </div>
                   <div className="sm:text-right">
                     <ActionButton
-                      disabled={self || setAssignmentStatus.isPending}
+                      disabled={self || row.user.disabled || (!row.user.emailVerified && next === "active") || setAssignmentStatus.isPending}
                       danger={active}
                       onClick={() =>
                         changeStatus(
@@ -657,6 +656,9 @@ export function PlatformInstitutionDashboard({
   });
   const utils = trpc.useUtils();
   const [selectedId, setSelectedId] = useState<number>();
+  const [editingInstitutionId, setEditingInstitutionId] = useState<number>();
+  const [editInstitutionName, setEditInstitutionName] = useState("");
+  const [editInstitutionCode, setEditInstitutionCode] = useState("");
   const [search, setSearch] = useState("");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -701,7 +703,7 @@ export function PlatformInstitutionDashboard({
       await utils.admin.institutions.invalidate();
     },
   });
-  const updateInstitution = trpc.admin.updateInstitution.useMutation({ onSuccess: async () => { await utils.admin.institutions.invalidate(); } });
+  const updateInstitution = trpc.admin.updateInstitution.useMutation({ onSuccess: async () => { setEditingInstitutionId(undefined); await utils.admin.institutions.invalidate(); } });
   const archiveInstitution = trpc.admin.archiveInstitution.useMutation({ onSuccess: async () => { await utils.admin.institutions.invalidate(); } });
   const rows = institutions.data ?? [];
   const institutionalRows = rows.filter(row => !row.isDemo);
@@ -939,16 +941,7 @@ export function PlatformInstitutionDashboard({
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-indigo-600 ring-1 ring-slate-200">
                     <Building2 size={18} />
                   </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">
-                      {row.name}
-                    </p>
-                    <p className="mt-1 truncate text-xs text-slate-500">
-                      {row.code} · ID {row.id} · created{" "}
-                      {dateLabel(row.createdAt)}
-                      {row.isDemo ? " · reserved practice workspace" : ""}
-                    </p>
-                  </div>
+                  <div className="min-w-0">{editingInstitutionId === row.id ? <div className="grid gap-1 sm:grid-cols-2"><input aria-label="Institution name" className="h-9 min-w-0 rounded-lg border px-2 text-sm" value={editInstitutionName} onChange={event => setEditInstitutionName(event.target.value)} /><input aria-label="Institution code" className="h-9 w-32 rounded-lg border px-2 text-sm uppercase" value={editInstitutionCode} onChange={event => setEditInstitutionCode(event.target.value.toUpperCase())} /></div> : <><p className="truncate text-sm font-semibold text-slate-900">{row.name}</p><p className="mt-1 truncate text-xs text-slate-500">{row.code} · ID {row.id} · created {dateLabel(row.createdAt)}{row.isDemo ? " · reserved practice workspace" : ""}</p></>}</div>
                 </div>
                 <div>
                   <StateBadge tone={row.active ? "emerald" : "slate"}>
@@ -956,13 +949,7 @@ export function PlatformInstitutionDashboard({
                   </StateBadge>
                 </div>
                 <div className="sm:text-right">
-                  <ActionButton disabled={updateInstitution.isPending || row.isDemo} onClick={() => {
-                    const nextName = window.prompt("Institution name", row.name);
-                    if (nextName === null) return;
-                    const nextCode = window.prompt("Institution code", row.code);
-                    if (nextCode === null) return;
-                    updateInstitution.mutate({ institutionId: row.id, name: nextName.trim(), code: nextCode.trim().toUpperCase() });
-                  }}><Pencil size={14}/> Edit details</ActionButton>
+                  {editingInstitutionId === row.id ? <div className="flex justify-end gap-1"><ActionButton disabled={updateInstitution.isPending} onClick={() => updateInstitution.mutate({ institutionId: row.id, name: editInstitutionName.trim(), code: editInstitutionCode.trim().toUpperCase() })}><Save size={14}/> Save</ActionButton><ActionButton onClick={() => setEditingInstitutionId(undefined)}>Cancel</ActionButton></div> : <ActionButton disabled={updateInstitution.isPending || row.isDemo} onClick={() => { setEditingInstitutionId(row.id); setEditInstitutionName(row.name); setEditInstitutionCode(row.code); }}><Pencil size={14}/> Edit details</ActionButton>}
                 </div>
                 <div className="sm:text-right">
                   <ActionButton

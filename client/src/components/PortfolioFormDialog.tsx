@@ -305,6 +305,7 @@ export default function PortfolioFormDialog({
     enabled: open && ["lesson", "reflection", "evidence"].includes(kind),
     retry: false,
   });
+  const uploadLimit = trpc.portfolio.uploadLimit.useQuery(undefined, { enabled: open && kind === "evidence", retry: false });
   const existingEvidence = trpc.portfolio.get.useQuery(
     { id: entry?.id ?? 1 },
     {
@@ -509,8 +510,9 @@ export default function PortfolioFormDialog({
   const validateLocal = (submitAfter: boolean) => {
     if (title.trim().length < 3)
       return "Add a clear title with at least three characters.";
-    if (file && file.size > 25 * 1024 * 1024)
-      return "Files must be 25 MiB or smaller.";
+    const maxEvidenceBytes = uploadLimit.data?.maxEvidenceBytes ?? 25 * 1024 * 1024;
+    if (file && file.size > maxEvidenceBytes)
+      return `Files must be ${uploadLimit.data?.maxEvidenceMiB ?? 25} MiB or smaller.`;
     if (
       file &&
       !allowedExtensions.includes(

@@ -5,6 +5,7 @@ import { pipeline } from "node:stream/promises";
 import { and, eq } from "drizzle-orm";
 import {
   evidenceFiles,
+  platformSettings,
   portfolioEntries,
   submissionVersions,
 } from "../drizzle/schema";
@@ -54,13 +55,16 @@ export function registerEvidenceRoutes(app: Express) {
       const contentLength = Number(req.headers["content-length"]);
       if (!Number.isSafeInteger(contentLength) || contentLength <= 0)
         return fail(res, 411, "The upload length is required.");
-      if (contentLength > MAX_BYTES)
-        return fail(res, 413, "Files are limited to 25 MiB.");
+      const database = await db.getDb();
+      if (!database) return fail(res, 503, "Database is unavailable.");
+      const maxSetting = await database.select().from(platformSettings).where(eq(platformSettings.key, "max_evidence_mib")).limit(1);
+      const configuredMiB = maxSetting[0]?.value?.mib;
+      const maxUploadBytes = Math.min(MAX_BYTES, typeof configuredMiB === "number" && configuredMiB >= 1 && configuredMiB <= 25 ? configuredMiB * 1024 * 1024 : MAX_BYTES);
+      if (contentLength > maxUploadBytes)
+        return fail(res, 413, `Files are limited to ${Math.floor(maxUploadBytes / (1024 * 1024))} MiB.`);
       const entryId = Number(req.query.entryId);
       if (!Number.isSafeInteger(entryId) || entryId < 1)
         return fail(res, 400, "Evidence entry is required.");
-      const database = await db.getDb();
-      if (!database) return fail(res, 503, "Database is unavailable.");
       const matches = await database
         .select()
         .from(portfolioEntries)
@@ -92,7 +96,7 @@ export function registerEvidenceRoutes(app: Express) {
         fileName,
         mimeType: mime,
         byteSize: contentLength,
-      });
+      }, maxUploadBytes);
       if (invalidFile)
         return fail(
           res,
@@ -124,7 +128,7 @@ export function registerEvidenceRoutes(app: Express) {
           let transferred = 0;
           for (const chunk of prefixChunks) {
             transferred += chunk.length;
-            if (transferred > contentLength || transferred > MAX_BYTES)
+            if (transferred > contentLength || transferred > maxUploadBytes)
               throw new Error("Upload size exceeded its declared limit.");
             yield chunk;
           }
@@ -135,7 +139,7 @@ export function registerEvidenceRoutes(app: Express) {
               ? next.value
               : Buffer.from(next.value);
             transferred += chunk.length;
-            if (transferred > contentLength || transferred > MAX_BYTES)
+            if (transferred > contentLength || transferred > maxUploadBytes)
               throw new Error("Upload size exceeded its declared limit.");
             yield chunk;
           }
